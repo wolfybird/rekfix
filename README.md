@@ -79,6 +79,15 @@ Four real cases on XDJ-1000MK2 decks, written up in [docs/cases](docs/cases):
 The database format notes, including the traps that cost the most time, are in
 [docs/format.md](docs/format.md).
 
+## Buy us a coffee
+
+lots of hard work went into the making, testing and refining of these DJ tools. if you're able to
+do so, buy us a coffee or a drink to thank us, we'd greatly appreciate it! thank you for giving
+them a try, we hope you enjoy using them and that they inspire creativity and save a lot of
+trouble. have a good set and happy playing. ~rfrank
+
+[Ko-fi](https://ko-fi.com/rfrank) · [Buy Me a Coffee](https://buymeacoffee.com/wolfybird)
+
 ## Licence
 
 MIT, see [LICENSE](LICENSE). Thanks to [Deep Symmetry](https://github.com/Deep-Symmetry/crate-digger)
