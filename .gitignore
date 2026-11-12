@@ -1,0 +1,18 @@
+# real sticks' data and the notes it came from never go in the repo
+research/
+*.pdb
+*.db
+*.db-wal
+*.db-shm
+*.bak
+*.rekfix-tmp
+RBFLTR.DAT
+DEVSETTING.DAT
+.privacy-words
+
+__pycache__/
+*.egg-info/
+build/
+dist/
+venv/
+.venv/

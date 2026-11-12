@@ -1,0 +1,30 @@
+[project]
+name = "rekfix"
+version = "0.1.0"
+description = "Diagnose and repair rekordbox USB exports without wiping the stick"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+keywords = ["rekordbox", "pioneer", "cdj", "xdj", "usb", "export.pdb", "dj", "repair"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/wolfybird/rekfix"
+Issues = "https://github.com/wolfybird/rekfix/issues"
+
+[project.scripts]
+rekfix = "rekfix.cli:main"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["rekfix"]
