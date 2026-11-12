@@ -1,14 +1,21 @@
 # Roadmap
 
-What exists (0.1): read-only checks, a recovery read for damaged files, diff, play histories,
-snapshots, a read test, and one repair (hiding root categories).
+What exists:
+- read-only checks, and a recovery read for damaged files;
+- diff, play histories, snapshots and a read test;
+- two repairs:
+  - hiding root categories (`menu`);
+  - removing tracks whose audio is gone (`prune`). It keeps tracks a play history lists, can
+    copy audio back, and tidies what earlier removals left behind.
+
+`prune` reproduces the [merged-playlists case](cases/2026-10-merged-playlists.md)'s hand fix
+exactly: replayed on a copy of that stick's database, it deleted the same 5,642 track rows,
+bit for bit.
 
 Next, roughly in order of how often they'd have helped:
 
-1. **`rekfix prune`: remove dead tracks.** Tracks whose audio is gone from the stick, removed
-   the way rekordbox does it (present bit + page count). It would keep any that a deck's play
-   history still lists, and offer to restore their audio instead. Used by hand in the
-   [merged-playlists case](cases/2026-10-merged-playlists.md).
+1. **Deck-test `prune`'s tidy-up on a real stick:** the corrected song count, the leftover
+   artwork and the page flags. See the open questions below.
 2. **`rekfix playlists`: compare and repair playlists against a rekordbox library.**
    - Read rekordbox's `master.db` (optional pyrekordbox dependency) or a rekordbox XML export.
    - Report merged, missing and reordered entries in both stick databases.
@@ -44,3 +51,18 @@ Open questions worth testing on real decks:
 - What the second footer word means. Rows present only there were either deleted, or live on
   older exports.
 - At what track count each root category starts to freeze a given player.
+- **Artists, albums, genres and labels no track uses.** Does rekordbox delete them when their
+  last track goes? And if one is deleted, does rekordbox's next export write it again for a new
+  track by that artist, or assume it's still there? Test on a spare stick:
+  1. export a few tracks;
+  2. remove one artist's only track with `prune`, deleting the artist by hand too;
+  3. export another track by that artist;
+  4. read the result with `rekfix diff`.
+
+  Until then, `prune` leaves them, and `check` lists them as `rows.unused`.
+- **Does a player care about the page flag (0x10) or the page stamp?** rekordbox always sets
+  them. A hand edit without them loaded fine on XDJ-1000MK2s.
+- **Does the ARTIST list on a player show artists with no tracks?** If it does, removing
+  `rows.unused` matters for big libraries.
+- **What newer players see:** `prune` edits `export.pdb` only. `exportLibrary.db` (encrypted
+  SQLite) still lists the removed tracks until rekordbox updates it.

@@ -35,7 +35,8 @@ pipx install "git+https://github.com/wolfybird/rekfix"
    - the database's structure;
    - playlists and play histories that point at missing tracks;
    - tracks whose audio or analysis file isn't on the stick;
-   - a root menu that's too heavy for the deck.
+   - a root menu that's too heavy for the deck;
+   - what an earlier removal of tracks left behind, such as a song count the decks show wrong.
 3. **Look up the symptom** in [docs/playbook.md](docs/playbook.md): what it usually means, how
    to confirm it, and what fixes it.
 
@@ -46,15 +47,24 @@ pipx install "git+https://github.com/wolfybird/rekfix"
 | `check STICK\|FILE [--scan] [--second-word] [--tables]` | health check; `--scan` reads a damaged file by page instead of by its (possibly broken) header and chains |
 | `diff OLD NEW` | what changed between two copies of export.pdb: rows, pages, playlists, root menu, histories |
 | `menu STICK [--hide ...\|--show ...] [--apply]` | the players' root browse menu; hide the categories that freeze older decks on big libraries |
+| `prune STICK [--restore-from DIR] [--restore-all] [--apply]` | remove tracks whose audio is gone from the stick, the way rekordbox removes tracks; keeps (or copies back) any a play history lists |
 | `history STICK [--tracks] [--scan]` | the play histories the decks saved on the stick |
 | `snapshot STICK DEST [--full]` | databases + file list, before you change anything |
 | `readtest STICK` | how fast and evenly the stick reads (Windows: bypassing the cache) |
 
-Only `menu --apply` writes, and only after:
-- refusing if rekordbox is running;
-- saving a copy of `export.pdb`.
+Only `menu --apply` and `prune --apply` write.
 
-It edits fixed-size fields in place, the same bytes rekordbox writes for the same change.
+**Before writing,** they:
+- refuse if rekordbox is running;
+- refuse to edit a database `check` finds damaged;
+- save a copy of `export.pdb`.
+
+**When writing,** they edit fixed-size fields in place, with the same bookkeeping rekordbox
+does: page counts and flags, and a new sequence number.
+
+**After editing,** `prune` re-reads the result from scratch before saving. It checks that the
+result is what was planned, and that no byte outside the fields it meant to change is
+different.
 
 ## What it's built from
 

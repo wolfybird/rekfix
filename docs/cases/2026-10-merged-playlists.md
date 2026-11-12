@@ -52,6 +52,32 @@ Instead, with rekordbox closed and copies of the databases saved:
 **Deck test:** the removed playlist's tracks were gone, histories worked, and the playlists were
 right.
 
+## A month later: what the hand fix missed
+
+The decks' USB info panel showed **19,771 songs** for a database of 14,129 tracks. The players
+don't count tracks; they show a number rekordbox stores in table 19 and adjusts as it adds and
+removes tracks. The fix had removed 5,642 tracks without lowering it (19,398 → still 19,398).
+rekordbox's next export then added its 373 new tracks to the stale number: 19,398 + 373 =
+19,771, and 14,129 + 5,642 = 19,771.
+
+Comparing rekordbox's own deletions on the same stick showed three more differences:
+- **Artwork:** rekordbox deletes a removed track's artwork row too. The fix left 5,643 behind.
+- **Artists:** the fix left 1,640 artists no track used. rekordbox's exports have none of
+  those. Whether rekordbox deletes them itself is still open
+  ([roadmap](../roadmap.md)).
+- **The page flag:** rekordbox flags every page with deleted rows (0x24 → 0x34); the fix didn't.
+
+None of it stopped the decks from working.
+
+`rekfix prune` now does the whole removal. Replayed on a copy of the database from before the
+fix, it deleted exactly the same 5,642 track rows, bit for bit. It also:
+- set the song count to 13,756;
+- removed the 5,643 artwork rows;
+- flagged the pages.
+
+On the stick as it is now, `rekfix check` reports what's left (`tracks.count`, `artwork.unused`,
+`rows.unused`, `page.deleted-flag`), and `rekfix prune --apply` would tidy it.
+
 ## Lessons
 
 - **Drop onto empty space** in the stick's playlist list, never onto an existing playlist.
@@ -60,3 +86,6 @@ right.
 - **Don't delete files from a stick** while its database still lists them; let rekordbox remove
   the tracks.
 - **Take a snapshot before every export.** There was none here, so "roll back" wasn't an option.
+- **Compare a hand edit with what rekordbox writes for the same change,** not only with what
+  the decks accept. The decks accepted a partial removal; its traces only showed up a month
+  later as a wrong song count.

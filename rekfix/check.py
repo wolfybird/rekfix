@@ -10,7 +10,7 @@ import struct
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 
-from .pdb import GROUP, HEADER, TABLES, Pdb
+from .pdb import GROUP, HEADER, LOOKUPS, TABLES, Pdb
 
 # the root categories a player builds by scanning every track when you land on them; on a large
 # library (~13-14k tracks on an XDJ-1000MK2) they can freeze the deck - see docs/playbook.md
@@ -175,6 +175,7 @@ def content(pdb):
     found.append(Finding("info", "summary", f"{len(tids):,} tracks, {sum(1 for v in tree.values() if not v[2]):,} "
                                             f"playlists, {len(entries):,} playlist entries, {len(hists)} play "
                                             f"histories ({len(hent):,} plays)"))
+    found += leftovers(pdb, [ts[0] for ts in by_id.values()])
     menu = pdb.menu()
     names = pdb.columns()
     shown = [m for m in sorted(menu, key=lambda m: m.sort) if m.visible]
@@ -186,6 +187,55 @@ def content(pdb):
     return by_id, found
 
 
+def unused(pdb, tracks):
+    """Rows of the lookup tables (genres, artists, albums, labels, artwork) that none of `tracks`
+    uses, directly or through an album: {table type: [rows]}. Exports rekordbox writes have none.
+    It's been seen deleting a removed track's artwork row along with the track; whether it also
+    deletes an artist (album, genre, label) whose last track goes hasn't been observed."""
+    used = {typ: set() for typ in LOOKUPS}
+    for t in tracks:
+        for typ, (_, fields) in LOOKUPS.items():
+            used[typ].update(getattr(t, f) for f in fields)
+    for album, artists in pdb.albums().items():
+        if album in used[3]:
+            used[2].update(artists)
+    out = {}
+    for typ in LOOKUPS:
+        if typ in pdb.tables:
+            rows = [r for i, r in pdb.lookup_rows(typ) if i not in used[typ]]
+            if rows:
+                out[typ] = rows
+    return out
+
+
+def leftovers(pdb, tracks):
+    """What removing tracks without rekordbox leaves behind: a stale song count, artwork (and
+    artists...) no track uses, pages missing the has-deleted-rows flag."""
+    found = []
+    row, count = pdb.song_count()
+    if row is not None and count != len(tracks):
+        found.append(Finding("warn", "tracks.count", f"players show {count:,} songs on their USB info panel, but "
+                                                     f"{len(tracks):,} tracks are present (left over from tracks "
+                                                     f"removed without updating it); `rekfix prune` corrects it"))
+    left = unused(pdb, tracks)
+    artwork = left.pop(13, [])
+    if artwork:
+        found.append(Finding("info", "artwork.unused", f"{len(artwork):,} artwork entries no track uses (left over "
+                                                       f"from removed tracks); `rekfix prune` removes them, as "
+                                                       f"rekordbox does when it removes a track"))
+    if left:
+        what = ", ".join(f"{len(rows):,} {TABLES[typ]}" for typ, rows in left.items())
+        found.append(Finding("info", "rows.unused", f"{what} that no track uses. rekordbox's exports have none, so "
+                                                    f"they're likely left over from tracks removed by another tool. "
+                                                    f"Left alone for now: see docs/format.md"))
+    flags = pdb.unflagged_pages()
+    if flags:
+        found.append(Finding("info", "page.deleted-flag", f"{len(flags):,} pages have deleted rows without the flag "
+                                                           f"rekordbox sets on such pages (an edit by another tool); "
+                                                           f"`rekfix prune` sets it"))
+    return found
+
+
 def files(pdb, root, by_id=None):
     """Tracks whose audio or analysis file isn't on the stick at `root`."""
     found = []
@@ -193,21 +243,23 @@ def files(pdb, root, by_id=None):
     missing_audio, missing_anlz = [], []
     for ts in by_id.values():
         t = ts[0]
-        if t.path and not os.path.exists(_on(root, t.path)):
+        if t.path and not os.path.exists(on_stick(root, t.path)):
             missing_audio.append(t)
         anlz = t.strings.get("analyze_path")
-        if anlz and not os.path.exists(_on(root, anlz)):
+        if anlz and not os.path.exists(on_stick(root, anlz)):
             missing_anlz.append(t)
     if missing_audio:
         found.append(Finding("warn", "files.audio", f"{len(missing_audio):,} tracks' audio files aren't on the stick "
-                                                    f"(listed but won't load), e.g. {missing_audio[0].path}"))
+                                                    f"(listed but won't load), e.g. {missing_audio[0].path}. "
+                                                    f"`rekfix prune` removes them or copies them back"))
     if missing_anlz:
         found.append(Finding("warn", "files.analysis", f"{len(missing_anlz):,} tracks' analysis files aren't on the "
                                                         f"stick, e.g. {missing_anlz[0].strings['analyze_path']}"))
     return found
 
 
-def _on(root, path):
+def on_stick(root, path):
+    """A path from the database ("/Contents/...") as a file on the stick mounted at root."""
     return os.path.join(root, *[p for p in path.replace("\\", "/").split("/") if p])
 
 
