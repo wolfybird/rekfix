@@ -50,6 +50,11 @@ to bottom and back, and new tracks loaded and played.
 
 `rekfix menu --hide` writes the same change directly.
 
+**A side puzzle:** the decks' USB info panel said "19771 songs", with 14,129 tracks in the
+database. That turned out to be left over from the hand fix in the
+[merged-playlists case](2026-10-merged-playlists.md#a-month-later-what-the-hand-fix-missed),
+and unrelated to the freeze.
+
 ## Lessons
 
 - **"It broke after X" is a lead, not a cause.** Changing one thing per deck test turned the

@@ -90,9 +90,9 @@ Older players read `export.pdb`, newer gear reads `exportLibrary.db`, and the tw
 **Fix:**
 - **If nothing on the stick is precious:** clear it and re-drag once, onto empty space.
 - **If it holds deck histories or cues you want:** remove the extra entries in place, the way
-  rekordbox deletes rows (clear the row's present bit, fix the page's count). That kept every
-  history and cue. A `rekfix` command for this is planned; `rekfix.pdb.Pdb.drop_row` is the
-  primitive.
+  rekordbox deletes rows (clear the row's present bit, fix the page's count and flag). That
+  kept every history and cue. A `rekfix` command for this is planned; `rekfix.pdb.Pdb.drop_row`
+  and `commit()` are the primitives.
 
 Case: [2026-10-merged-playlists](cases/2026-10-merged-playlists.md).
 
@@ -103,9 +103,31 @@ example when a playlist's files were removed by hand rather than in rekordbox.
 
 **Confirm:** `rekfix check E:\` reports `files.audio`.
 
-**Fix:** put the files back (from your library or a snapshot), or remove those tracks in rekordbox
-and let it update the stick. Before removing anything, check whether a deck's play history still
-lists the track: removing it from a history breaks that history.
+**Fix:** either put the files back or remove the tracks.
+- **In rekordbox:** remove the tracks from the stick's device library and let it update the stick.
+- **Without rekordbox:** `rekfix prune E:\` shows what removing them would change; add `--apply`
+  to do it. It removes them the way rekordbox removes tracks, along with their playlist entries
+  and artwork, and it corrects the song count the decks show.
+  - It **keeps any track a deck's play history lists**, since removing it would break that
+    history. `--restore-from D:\Music` copies those tracks' audio back from your library or a
+    snapshot: same file size, name or the start of it.
+  - `--restore-all` copies back every missing track it can find, and removes only the rest.
+
+`prune` edits `export.pdb`, which older players read. `exportLibrary.db`, which newer players
+and rekordbox's view of the stick use, still lists the tracks until rekordbox removes them.
+
+## The deck's info panel shows more songs than the stick has
+
+**Usually means:** tracks were removed from `export.pdb` by a tool other than rekordbox, which
+left the song count alone. The decks show a stored number; they don't count. Harmless, but it's
+a sign of an incomplete removal: artwork and artists the removed tracks used are usually still
+there too.
+
+**Confirm:** `rekfix check E:\` reports `tracks.count`.
+
+**Fix:** `rekfix prune E:\ --apply` sets the count right, removes the leftover artwork, and flags
+the pages the earlier edit changed, as rekordbox would have. Check the dry run first; it lists
+everything it will change.
 
 ## Files come and go, copies fail, the stick drops off
 

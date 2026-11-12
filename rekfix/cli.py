@@ -5,12 +5,14 @@
   rekfix diff OLD.pdb NEW.pdb       what changed between two copies
   rekfix menu E:\\                  the players' root menu
   rekfix menu E:\\ --hide time,bitrate,"file name","hot cue bank" --apply
+  rekfix prune E:\\                 tracks whose audio is gone: what removing them would change
+  rekfix prune E:\\ --restore-from D:\\Music --apply
   rekfix history E:\\               play histories the decks saved
   rekfix snapshot E:\\ D:\\backups   copy the databases + list every file, before anything else
   rekfix readtest E:\\              how fast and evenly the stick reads
 
-Commands that write (menu --hide/--show --apply) save a copy of the database first, refuse while
-rekordbox is running, and only edit fixed-size fields in place.
+Commands that write (menu and prune, with --apply) save a copy of the database first, refuse
+while rekordbox is running, and only edit fixed-size fields in place.
 """
 import argparse
 import datetime as dt
@@ -20,7 +22,7 @@ import subprocess
 import sys
 from collections import Counter, defaultdict
 
-from . import __version__, check, menu, readtest, snapshot
+from . import __version__, check, menu, prune, readtest, snapshot
 from .pdb import TABLES, Pdb
 
 
@@ -116,6 +118,11 @@ def cmd_menu(a):
     path, root = pdb_path(a.target)
     pdb = Pdb.open(path)
     change = a.hide or a.show
+    errors = sorted({f.code for f in check.walk(pdb)[1] if f.level == "error"}) if change else []
+    if errors:
+        print(f"nothing changed: the database has structural errors ({', '.join(errors)}), and menu only "
+              f"edits a healthy one; see `rekfix check`")
+        return 1
     if change:
         wanted = [w for part in change for w in part.split(",") if w.strip()]
         ids = menu.resolve(pdb, wanted)
@@ -135,9 +142,58 @@ def cmd_menu(a):
     if rekordbox_running():
         raise SystemExit("rekordbox is running - close it first (it may rewrite the stick)")
     saved = backup(path, a.backup_dir)
-    pdb.bump_sequence()
+    pdb.commit()
     pdb.save(path)
     print(f"written. The original is saved as {saved}")
+    return 0
+
+
+def cmd_prune(a):
+    path, root = pdb_path(a.target)
+    if root is None:
+        raise SystemExit("prune needs the stick (its root folder), not only export.pdb: it looks there for "
+                         "each track's audio")
+    pdb = Pdb.open(path)
+    try:
+        p = prune.plan(pdb, root, a.restore_from or (), a.restore_all, a.force)
+    except prune.PruneError as e:
+        print(f"nothing changed: {e}")
+        return 1
+    print(f"{path}:")
+    for line in prune.describe(pdb, p, a.verbose):
+        print(" ", line)
+    if not p.edits_database and not p.restore:
+        print("nothing to do")
+        return 0
+    changed = []
+    if p.edits_database:
+        before = Pdb(bytes(pdb.data))
+        changed = prune.apply(pdb, p)
+        problems = prune.verify(before, pdb.data, p, changed)
+        if problems:
+            print("the edited database didn't check out, so nothing was written:")
+            for problem in problems:
+                print("  !", problem)
+            return 1
+    if not a.apply:
+        what = f"export.pdb ({len(changed):,} pages)" if changed else "nothing in export.pdb"
+        print(f"dry run, checked: this would change {what}"
+              + (f" and copy {len(p.restore):,} files back" if p.restore else "")
+              + ". Add --apply to do it (export.pdb is copied first)")
+        return 0
+    if rekordbox_running():
+        raise SystemExit("rekordbox is running - close it first (it may rewrite the stick)")
+    saved = backup(path, a.backup_dir) if p.edits_database else None
+    try:
+        copied = prune.restore_files(p, root)
+    except (prune.PruneError, OSError) as e:
+        print(f"stopped while copying audio back: {e}")
+        return 1
+    if p.edits_database:
+        pdb.save(path)
+    print(f"done: {len(p.remove):,} tracks removed, {len(copied):,} files copied back"
+          + (f". The original export.pdb is saved as {saved}" if saved else ""))
+    print("Test the stick on your decks before relying on it.")
     return 0
 
 
@@ -199,6 +255,19 @@ def main(argv=None):
     p.add_argument("--apply", action="store_true", help="write the change (otherwise a dry run)")
     p.add_argument("--backup-dir", help="where the copy of the original goes (default: next to it)")
     p.set_defaults(fn=cmd_menu)
+
+    p = sub.add_parser("prune", help="remove tracks whose audio is gone, the way rekordbox removes tracks")
+    p.add_argument("target", help="the stick (e.g. E:\\)")
+    p.add_argument("--restore-from", action="append", metavar="DIR",
+                   help="folder to find missing audio in (a stick snapshot or your music library); "
+                        "tracks a play history lists get their audio copied back from it")
+    p.add_argument("--restore-all", action="store_true",
+                   help="copy back every missing track found in --restore-from, not only those in a history")
+    p.add_argument("--apply", action="store_true", help="write the change (otherwise a dry run)")
+    p.add_argument("--force", action="store_true", help="go ahead even if most tracks look missing")
+    p.add_argument("--backup-dir", help="where the copy of export.pdb goes (default: next to it)")
+    p.add_argument("-v", "--verbose", action="store_true", help="list every track affected")
+    p.set_defaults(fn=cmd_prune)
 
     p = sub.add_parser("history", help="play histories the decks saved")
     p.add_argument("target")

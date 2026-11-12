@@ -19,9 +19,14 @@ def utf16(s):
     return bytes([0x90]) + struct.pack("<H", len(b) + 4) + b"\x00" + b
 
 
-def track_row(tid, title, path, artist_id=1, size=1000, duration=200, title_enc=short):
+def track_row(tid, title, path, artist_id=1, size=1000, duration=200, title_enc=short, album_id=0, genre_id=0,
+              label_id=0, artwork_id=0):
     fixed = bytearray(0x88)
     struct.pack_into("<I", fixed, 0x10, size)
+    struct.pack_into("<I", fixed, 0x1C, artwork_id)
+    struct.pack_into("<I", fixed, 0x28, label_id)
+    struct.pack_into("<I", fixed, 0x3C, genre_id)
+    struct.pack_into("<I", fixed, 0x40, album_id)
     struct.pack_into("<I", fixed, 0x44, artist_id)
     struct.pack_into("<I", fixed, 0x48, tid)
     struct.pack_into("<H", fixed, 0x54, duration)
@@ -63,6 +68,21 @@ def artist_row(aid, name):
     return struct.pack("<HHIBB", 0x60, 0, aid, 3, 10) + short(name)
 
 
+def id_name_row(i, name):
+    """genres, labels and artwork: id, then the name (or the artwork's path)"""
+    return struct.pack("<I", i) + short(name)
+
+
+def album_row(aid, name, artist_id):
+    return struct.pack("<HHIIIIBB", 0x80, 0, 0, artist_id, aid, 0, 3, 0x16) + short(name)
+
+
+def device_row(songs):
+    """table 19's single row, laid out as rekordbox 6 writes it: the song count at +4"""
+    return (struct.pack("<HHI", 0x0280, 0x60, songs) + b"\x00\x03\x00\x00" + short("2026-01-01")
+            + bytes([0x19, 0x1E]) + short("1000") + short("SYNTHSTICK"))
+
+
 COLUMNS = {1: "GENRE", 2: "ARTIST", 3: "ALBUM", 4: "TRACK", 5: "BPM", 7: "YEAR", 11: "KEY", 14: "TIME",
            15: "BITRATE", 16: "FILE NAME", 17: "PLAYLIST", 18: "HOT CUE BANK", 19: "HISTORY"}
 
@@ -86,7 +106,7 @@ def page(index, typ, rows, nxt=0, present=None, second_word=False):
     struct.pack_into("<4I", p, 0, 0, index, typ, nxt)
     struct.pack_into("<I", p, 0x10, 1)
     p[0x18:0x1B] = (n | len(present) << 13).to_bytes(3, "little")
-    p[0x1B] = 0x24
+    p[0x1B] = 0x24 if len(present) == n else 0x34      # rekordbox flags pages that have deleted rows
     struct.pack_into("<2H", p, 0x1C, free, used)
     p[0x28:0x28 + used] = data
     for g in range(groups):
@@ -99,17 +119,31 @@ def page(index, typ, rows, nxt=0, present=None, second_word=False):
     return bytes(p)
 
 
-def build(tracks=3, entries_per_list=None, heavy_menu=True, extra_pages=None):
+def audio_path(i):
+    return f"/Contents/Artist/Album/{i:02d} Track {i}.mp3"
+
+
+def build(tracks=3, entries_per_list=None, heavy_menu=True, extra_pages=None, history=(1, 2)):
     """A complete little export.pdb as bytes. Tables 0-19 each get one data page (tracks get two,
-    chained), so chains, rows and cross-references are all exercised."""
+    chained), so chains, rows and cross-references are all exercised. With more than one track,
+    the last one has an artist, album, genre and label of its own; every track has its own
+    artwork. `history`: the tracks a deck's play history lists."""
     entries_per_list = entries_per_list or {1: [1, 2], 2: [3]}
+    other = tracks > 1
+    own = lambda i: 2 if other and i == tracks else 1
     rows = {t: [] for t in range(20)}
-    rows[0] = [track_row(i, f"Track {i}", f"/Contents/Artist/Album/{i:02d} Track {i}.mp3") for i in range(1, tracks + 1)]
-    rows[2] = [artist_row(1, "Artist")]
+    rows[0] = [track_row(i, f"Track {i}", audio_path(i), artist_id=own(i), album_id=own(i), genre_id=own(i),
+                         label_id=own(i), artwork_id=i) for i in range(1, tracks + 1)]
+    rows[1] = [id_name_row(1, "House")] + ([id_name_row(2, "Techno")] if other else [])
+    rows[2] = [artist_row(1, "Artist")] + ([artist_row(2, "Other Artist")] if other else [])
+    rows[3] = [album_row(1, "Album", 1)] + ([album_row(2, "Other Album", 2)] if other else [])
+    rows[4] = [id_name_row(1, "Label")] + ([id_name_row(2, "Other Label")] if other else [])
+    rows[13] = [id_name_row(i, f"/PIONEER/Artwork/00001/a{i}.jpg") for i in range(1, tracks + 1)]
+    rows[19] = [device_row(tracks)]
     rows[7] = [tree_row(1, "Warmup", sort=0), tree_row(2, "Peak", sort=1)]
     rows[8] = [entry_row(pid, k, tid) for pid, tids in entries_per_list.items() for k, tid in enumerate(tids, 1)]
     rows[11] = [hist_list_row(1, "HISTORY 001")]
-    rows[12] = [hist_entry_row(1, 1, 1), hist_entry_row(1, 2, 2)]
+    rows[12] = [hist_entry_row(1, k, tid) for k, tid in enumerate(history, 1)]
     rows[16] = [column_row(c, n) for c, n in COLUMNS.items()]
     shown = [2, 3, 4, 11, 17, 19, 5, 7] + ([14, 18, 16, 15] if heavy_menu else [])
     rows[17] = [menu_row(c, c, 99, shown.index(c) + 1 if c in shown else 0) for c in COLUMNS]

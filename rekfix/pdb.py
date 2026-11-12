@@ -17,11 +17,30 @@ from dataclasses import dataclass, field
 
 HEADER = 0x28           # page header size; rows start here
 GROUP = 0x24            # one row group in the footer: 16 offsets + present flags + other flags
+STAMP = 0x10            # page header: the sequence number of the write that last changed the page
 
+# page flags (+0x1B): rekordbox's data pages are 0x24, or 0x34 once any row on them has been
+# deleted; index pages have 0x40 set (0x64)
+FLAG_HAS_DELETED = 0x10
+FLAG_INDEX = 0x40
+
+# table 19 holds one row with the song count players show on their USB info panel
+DEVICE_INFO_SUBTYPE = 0x0280
+
+# 19 keeps the name the crate-digger docs give it, but it isn't the play history (11 and 12 are):
+# it holds the song count players show on their info panel, see Pdb.song_count()
 TABLES = {0: "tracks", 1: "genres", 2: "artists", 3: "albums", 4: "labels", 5: "keys", 6: "colors",
           7: "playlist_tree", 8: "playlist_entries", 9: "unknown_9", 10: "unknown_10",
           11: "history_playlists", 12: "history_entries", 13: "artwork", 14: "unknown_14",
           15: "unknown_15", 16: "columns", 17: "menu", 18: "unknown_18", 19: "history"}
+
+# tables whose rows exist only for the tracks that use them: type -> (offset of the row's id,
+# the track fields that point at it). Album rows also point at an artist (see Pdb.albums).
+LOOKUPS = {1: (0x00, ("genre_id",)),
+           2: (0x04, ("artist_id", "composer_id", "original_artist_id", "remixer_id")),
+           3: (0x0C, ("album_id",)),
+           4: (0x00, ("label_id",)),
+           13: (0x00, ("artwork_id",))}
 
 # track row: fixed fields, then 21 u16 string offsets (relative to the row) from +0x5E
 TRACK_STRINGS = {"isrc": 0, "lyricist": 1, "message": 5, "kuvo_public": 6, "autoload_hotcues": 7,
@@ -55,7 +74,7 @@ class Page:
 
     @property
     def is_data(self):
-        return not self.flags & 0x40
+        return not self.flags & FLAG_INDEX
 
 
 @dataclass
@@ -78,6 +97,13 @@ class Track:
     year: int
     artist_id: int
     album_id: int
+    composer_id: int = 0
+    original_artist_id: int = 0
+    remixer_id: int = 0
+    genre_id: int = 0
+    label_id: int = 0
+    artwork_id: int = 0
+    key_id: int = 0
     strings: dict = field(default_factory=dict)
     string_errors: list = field(default_factory=list)
 
@@ -150,7 +176,8 @@ class Pdb:
         for t in range(self.num_tables):
             typ, empty, first, last = struct.unpack_from("<4I", d, 0x1C + 16 * t)
             self.tables[typ] = Table(typ, empty, first, last)
-        self._touched = set()
+        self._dropped = set()           # pages that lost rows: counts and flags to update
+        self._dirty = set()             # pages changed in any way: stamped on commit()
         self._legacy = {}
 
     @classmethod
@@ -274,7 +301,10 @@ class Pdb:
             p = row.pos
             t = Track(id=self.u32(p + 0x48), row=row, file_size=self.u32(p + 0x10), sample_rate=self.u32(p + 0x08),
                       bitrate=self.u32(p + 0x30), tempo=self.u32(p + 0x38), duration=self.u16(p + 0x54),
-                      year=self.u16(p + 0x50), artist_id=self.u32(p + 0x44), album_id=self.u32(p + 0x40))
+                      year=self.u16(p + 0x50), artist_id=self.u32(p + 0x44), album_id=self.u32(p + 0x40),
+                      composer_id=self.u32(p + 0x0C), original_artist_id=self.u32(p + 0x24),
+                      remixer_id=self.u32(p + 0x2C), genre_id=self.u32(p + 0x3C), label_id=self.u32(p + 0x28),
+                      artwork_id=self.u32(p + 0x1C), key_id=self.u32(p + 0x20))
             for name, i in TRACK_STRINGS.items():
                 text, err = self.string_at(row, self.u16(p + 0x5E + 2 * i))
                 t.strings[name] = text
@@ -299,6 +329,39 @@ class Pdb:
             near = self.data[row.pos + 9]
             rel = self.u16(row.pos + 10) if subtype == 0x64 else near
             out[self.u32(row.pos + 4)] = self.string_at(row, rel)[0]
+        return out
+
+    def lookup_rows(self, typ):
+        """[(id, row)] of one of the LOOKUPS tables (genres, artists, albums, labels, artwork)."""
+        at = LOOKUPS[typ][0]
+        return [(self.u32(r.pos + at), r) for r in self.rows(typ)]
+
+    def albums(self):
+        """{album id: [album artist id, ...]} (one per row; ids rarely repeat)."""
+        out = {}
+        for r in self.rows(3):
+            out.setdefault(self.u32(r.pos + 0x0C), []).append(self.u32(r.pos + 0x08))
+        return out
+
+    def song_count(self):
+        """(row, count): the number of songs players show on their USB info panel. rekordbox keeps
+        it in table 19's single row and adjusts it as it adds and removes tracks; a tool that
+        removes tracks without updating it leaves the players showing the old number.
+        (None, None) if the table doesn't hold exactly one row of the known layout."""
+        rows = self.rows(19) if 19 in self.tables else []
+        if len(rows) != 1 or self.u16(rows[0].pos) != DEVICE_INFO_SUBTYPE:
+            return None, None
+        return rows[0], self.u32(rows[0].pos + 4)
+
+    def unflagged_pages(self):
+        """Data pages with deleted rows but without the flag rekordbox sets on such pages: left by
+        an edit that cleared present bits only."""
+        out = []
+        for typ in self.tables:
+            for page in (self.scan_pages(typ) if self.scan else self.chain(typ)):
+                if page.is_data and not page.flags & FLAG_HAS_DELETED and any(
+                        not self.is_present(page, s) for s in range(page.slots)):
+                    out.append(page.index)
         return out
 
     def playlist_tree(self):
@@ -346,9 +409,11 @@ class Pdb:
         return out
 
     # ------------------------------------------------------------ editing
+    # An edit happens in memory: change rows, then commit() once, then save(). That matches what
+    # rekordbox's own writes look like (docs/format.md, "Editing like rekordbox").
     def drop_row(self, row):
         """Delete a row the way rekordbox does: clear its present bit; fix_counts() then updates
-        the page's packed present-row count. Nothing is moved or zeroed."""
+        the page's packed present-row count and flags. Nothing is moved or zeroed."""
         page = self.page(row.page)
         if not self.is_present(page, row.slot):
             raise ValueError(f"row {row.slot} on page {row.page} is already deleted")
@@ -357,23 +422,50 @@ class Pdb:
         words = (base - 4, base - 2) if self.legacy(page.type) else (base - 4,)
         for at in words:
             struct.pack_into("<H", self.data, at, struct.unpack_from("<H", self.data, at)[0] & ~bit)
-        self._touched.add(row.page)
+        self._dropped.add(row.page)
+        self._dirty.add(row.page)
 
     def fix_counts(self):
-        for index in sorted(self._touched):
+        """For pages that lost rows: the 11-bit present count, and the flag rekordbox sets on a
+        page once it has deleted rows."""
+        for index in sorted(self._dropped):
             page = self.page(index)
             present = sum(self.is_present(page, s) for s in range(page.slots))
             packed = page.slots | present << 13
             self.data[page.pos + 0x18:page.pos + 0x1B] = packed.to_bytes(3, "little")
-        self._touched.clear()
+            if present < page.slots:
+                self.data[page.pos + 0x1B] |= FLAG_HAS_DELETED
+        self._dropped.clear()
+
+    def flag_pages(self, indexes):
+        """Set the has-deleted-rows flag on pages an earlier edit left without it."""
+        for index in indexes:
+            self.data[index * self.page_size + 0x1B] |= FLAG_HAS_DELETED
+            self._dirty.add(index)
 
     def set_u16(self, pos, value):
         struct.pack_into("<H", self.data, pos, value)
+        self._dirty.add(pos // self.page_size)
+
+    def set_u32(self, pos, value):
+        struct.pack_into("<I", self.data, pos, value)
+        self._dirty.add(pos // self.page_size)
 
     def bump_sequence(self):
         """rekordbox raises the header's sequence number on every write; do the same."""
         self.sequence += 1
         struct.pack_into("<I", self.data, 0x14, self.sequence)
+
+    def commit(self):
+        """Finish an edit as one rekordbox-style write: page counts and flags, a new sequence
+        number, and every changed page stamped with it. Returns the pages changed."""
+        self.fix_counts()
+        self.bump_sequence()
+        changed = sorted(i for i in self._dirty if i)
+        for index in changed:
+            struct.pack_into("<I", self.data, index * self.page_size + STAMP, self.sequence)
+        self._dirty.clear()
+        return changed
 
     def save(self, path):
         import os

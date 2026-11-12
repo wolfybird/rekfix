@@ -16,6 +16,11 @@ def codes(found, level=None):
     return {f.code for f in found if level is None or f.level == level}
 
 
+def read(path, mode="rb"):
+    with open(path, mode) as fh:
+        return fh.read()
+
+
 class Strings(unittest.TestCase):
     def test_three_encodings(self):
         for enc, text in ((synth.short, "Short"), (synth.long_ascii, "Long ascii " * 20), (synth.utf16, "Ünïcødé ✓")):
@@ -151,16 +156,31 @@ class Commands(unittest.TestCase):
             rb = self.stick(root)
             code, out = self.run_cli("check", root, "--no-files")
             self.assertEqual(code, 0, out)
-            before = open(os.path.join(rb, "export.pdb"), "rb").read()
+            before = read(os.path.join(rb, "export.pdb"))
             code, out = self.run_cli("menu", root, "--hide", "time,bitrate")
             self.assertIn("dry run", out)
-            self.assertEqual(open(os.path.join(rb, "export.pdb"), "rb").read(), before)
+            self.assertEqual(read(os.path.join(rb, "export.pdb")), before)
             code, out = self.run_cli("menu", root, "--hide", "time,bitrate", "--apply")
             self.assertIn("written", out)
             after = Pdb.open(os.path.join(rb, "export.pdb"))
             self.assertEqual(after.sequence, 101)
             self.assertFalse(any(m.visible for m in after.menu() if m.category in (14, 15)))
             self.assertTrue(any(f.endswith(".bak") for f in os.listdir(rb)))
+
+    def test_menu_refuses_a_damaged_database(self):
+        with tempfile.TemporaryDirectory() as root:
+            rb = self.stick(root)
+            path = os.path.join(rb, "export.pdb")
+            data = bytearray(read(path))
+            first = struct.unpack_from("<I", data, 0x1C + 8)[0]
+            struct.pack_into("<I", data, first * synth.PS + 12, first)      # tracks page -> itself
+            struct.pack_into("<I", data, 0x1C + 12, 9999)
+            with open(path, "wb") as fh:
+                fh.write(data)
+            code, out = self.run_cli("menu", root, "--hide", "time", "--apply")
+            self.assertEqual(code, 1)
+            self.assertIn("structural errors", out)
+            self.assertEqual(read(path), bytes(data))
 
     def test_snapshot(self):
         with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as dest:
@@ -169,7 +189,7 @@ class Commands(unittest.TestCase):
             with redirect_stdout(out):
                 path = snapshot.take(root, dest, "snap")
             self.assertTrue(os.path.exists(os.path.join(path, "PIONEER", "rekordbox", "export.pdb")))
-            self.assertIn("export.pdb", open(os.path.join(path, "checksums.md5")).read())
+            self.assertIn("export.pdb", read(os.path.join(path, "checksums.md5"), "r"))
             self.assertIn("manifest.csv", os.listdir(path))
 
 

@@ -33,7 +33,7 @@ they can drift apart.
 | 08 | u32 | number of tables (20) |
 | 0C | u32 | next unused page |
 | 10 | u32 | unknown (1) |
-| 14 | u32 | sequence number: rekordbox raises it on every write, even just from seeing the stick |
+| 14 | u32 | sequence number: rekordbox raises it on every write, even just from seeing the stick; each page it changes is stamped with it (page +10) |
 | 1C | 16 × n | table descriptors: type, empty candidate page, first page, last page (u32 each) |
 
 **Trap: the header can describe a different database than the file holds.** On one damaged
@@ -54,10 +54,21 @@ pages. The tables' page chains (and every page's own type field) still led to al
 | 13 | artwork | id + path |
 | 16 | columns | the category names players show (GENRE ... BITRATE) |
 | 17 | menu | the players' root browse menu (below) |
-| 19 | "history" | **not** the play history; holds a date stamp and scaffolding |
+| 19 | "history" | **not** the play history: one row holding the song count players show (below) |
 
 **Trap: play history is in tables 11 and 12, not 19.** Table 19 looked like history and was
 empty, which once led to the wrong conclusion that a stick's histories were lost.
+
+**Table 19 and the "songs" on the players' info panel.** Its one present row (written by
+rekordbox 6) starts with u16 0x0280 and holds:
+- at +4, a u32: **the song count** players show on their USB info panel;
+- a date, a short string ("1000") and the stick's name.
+
+Players don't count the tracks; they show this number. rekordbox adjusts it as it adds and
+removes tracks. A tool that removes tracks without updating it leaves the decks showing the old
+total. One stick read "19771 songs" with 14,129 tracks in its database: a hand edit had removed
+5,642 tracks a month earlier and left the count alone, and rekordbox's next export added its 373
+new tracks on top. `rekfix check` reports this as `tracks.count`; `rekfix prune` corrects it.
 
 ### Pages
 
@@ -68,10 +79,14 @@ Every page has a 0x28-byte header; rows follow from +28:
 | 04 | u32 | page index (equals its position) |
 | 08 | u32 | table type |
 | 0C | u32 | next page in the table's chain |
+| 10 | u32 | the sequence number (header +14) of the write that last changed this page |
 | 18 | 3 bytes | **packed counts**: low 13 bits = row slots, high 11 bits = rows still present |
-| 1B | u8 | flags: 0x40 set = not a data page (index pages), skip its rows |
+| 1B | u8 | flags: 0x24 = data page; **0x34** = data page some of whose rows were deleted; 0x40 set (0x64) = index page, skip its rows |
 | 1C | u16 | free bytes |
 | 1E | u16 | used bytes (the rows' area) |
+
+The 0x10 flag is consistent across rekordbox's own files: on a 2,975-page export, all 283
+pages with deleted rows had it, and no other page did.
 
 **Trap: the byte at +18 is not the row count.** It's only the low byte of the 13-bit slot
 count. Reading it alone silently loses rows on any page holding more than 255, which happens
@@ -99,9 +114,47 @@ growing backwards. For group `g`, let `base = page_end - g * 0x24`:
 
 The last group is shorter: 2 bytes per row plus the two flags words.
 
-**Deleting a row** the way rekordbox does: clear its present bit and lower the page's 11-bit
-present count. Nothing is moved or zeroed, so the row's bytes stay readable.
-`rekfix.pdb.Pdb.drop_row` does exactly this.
+**Deleting a row** the way rekordbox does:
+- clear its present bit;
+- lower the page's 11-bit present count;
+- set the page's 0x10 flag.
+
+Nothing is moved or zeroed, so the row's bytes stay readable. rekordbox's free and used sizes
+don't change either.
+
+### Editing like rekordbox
+
+Comparing rekordbox's own writes across snapshots of one stick shows what a write looks like:
+- Every page it changes gets the write's sequence number at +10.
+- The header's sequence number goes up. rekordbox raises it several times per session.
+- Rows are deleted as above.
+- Changed rows are often deleted and written again as new rows, rather than edited in place.
+  `rekfix` edits fixed-size fields in place instead, which leaves everything else untouched.
+
+rekfix makes an edit in memory, then `Pdb.commit()` does the bookkeeping in one go: counts,
+flags, a new sequence number and the stamps. Then it re-reads the result before saving.
+
+**Removing a track,** as rekordbox did it on a real stick, deletes:
+- the track's row;
+- the track's artwork row (210 tracks removed, 210 artwork rows deleted with them).
+
+Playlists stay numbered 1..n, and the song count in table 19 changes.
+
+Artists, albums, genres and labels are an open question. rekordbox's exports have none that no
+track uses. But in every removal observed, another track still used them, so it's unknown
+whether rekordbox deletes them itself. It's also unknown what rekordbox does when it later
+exports a track by an artist whose row someone else deleted. `rekfix prune` therefore leaves
+them, and `rekfix check` lists them as `rows.unused` (info).
+
+**Trap: a partial removal still works, and still leaves traces.** A hand edit that only
+cleared present bits and fixed the counts loaded fine on XDJ-1000MK2 decks, and rekordbox
+exported on top of it later. But it left behind:
+- the song count (the decks showed 5,642 songs too many);
+- 5,643 artwork rows;
+- 1,640 artists no track used;
+- 1,460 pages with deleted rows but no 0x10 flag.
+
+`rekfix check` reports these, and `rekfix prune` tidies all but the artists.
 
 **Trap: the second flags word.** Normally the present bits are at base - 4, and rows rekordbox
 deleted have their bit cleared there while the second word may still have it set. One older
@@ -130,7 +183,11 @@ garbage.
 | offset | size | |
 |---|---|---|
 | 08 | u32 | sample rate |
+| 0C | u32 | composer (an artist id) |
 | 10 | u32 | file size |
+| 1C | u32 | artwork id |
+| 20 | u32 | key id |
+| 24 / 28 / 2C | u32 | original artist / label / remixer id |
 | 30 | u32 | bitrate |
 | 38 | u32 | tempo × 100 |
 | 3C / 40 / 44 | u32 | genre / album / artist id |
@@ -144,6 +201,9 @@ String slots used here: 10 date added, 14 analysis file path, 17 title, 19 file 
 
 rekordbox leaves slack after each track row (zeros, at least 36 bytes in practice). A longer
 title can grow into it by shifting the later strings and their offsets, without moving the row.
+
+Album rows point at an artist too (album artist at +08, the album's id at +0C). In rekordbox's
+exports, every artist row is used by one of the four track fields or by an album.
 
 ### The root menu (table 17) and the heavy categories
 
