@@ -8,6 +8,7 @@
   rekfix prune E:\\                 tracks whose audio is gone: what removing them would change
   rekfix prune E:\\ --restore-from D:\\Music --apply
   rekfix rebuild E:\\ library.xml --music D:\\stick-copy   recover the library for rekordbox
+  rekfix clone E:\\ F:\\ --audio-from D:\\Music --apply      an exact copy, read back file by file
   rekfix history E:\\               play histories the decks saved
   rekfix snapshot E:\\ D:\\backups   copy the databases + list every file, before anything else
   rekfix readtest E:\\              how fast and evenly the stick reads
@@ -23,7 +24,7 @@ import subprocess
 import sys
 from collections import Counter, defaultdict
 
-from . import __version__, check, menu, prune, readtest, rebuild, snapshot
+from . import __version__, check, clone, menu, prune, readtest, rebuild, snapshot
 from .pdb import TABLES, Pdb
 
 
@@ -220,6 +221,37 @@ def cmd_rebuild(a):
     return 1 if problems else 0
 
 
+def cmd_clone(a):
+    p = clone.plan(a.source, a.target, a.audio_from or (), a.skip or (), a.allow_missing)
+    for line in clone.describe(p):
+        print(line)
+    if a.verify_only:
+        problems = clone.verify_only(p)
+        for problem in problems[:50]:
+            print("  !", problem)
+        print(f"{len(problems):,} difference(s)" if problems else "the target matches the source, byte for byte")
+        return 1 if problems else 0
+    if p.refusals:
+        return 1
+    if not a.apply:
+        print("dry run: add --apply to copy (the target's files are replaced; nothing on the source changes)")
+        return 0
+    if rekordbox_running():
+        raise SystemExit("rekordbox is running - close it first (it writes to sticks it sees)")
+    try:
+        done, nbytes, failures = clone.run(p, verify=not a.no_verify, remove_extra=a.remove_extra)
+    except clone.CloneError as e:
+        print(f"stopped: {e}")
+        return 1
+    for f in failures[:50]:
+        print("  !", f)
+    if failures:
+        return 1
+    print(f"done: {done:,} files, {nbytes / 1e9:.1f} GB copied" + ("" if a.no_verify else " and read back")
+          + ". Eject the target properly, then test it on your decks.")
+    return 0
+
+
 def cmd_history(a):
     pdb = Pdb.open(pdb_path(a.target)[0], scan=a.scan, second_word=a.second_word)
     lists = pdb.history_playlists()
@@ -305,6 +337,23 @@ def main(argv=None):
     p.add_argument("--all-audio", action="store_true",
                    help="also add audio files the database doesn't list, with their analysis")
     p.set_defaults(fn=cmd_rebuild)
+
+    p = sub.add_parser("clone", help="copy a stick exactly onto another stick (no rekordbox export), then read "
+                                      "every file back")
+    p.add_argument("source", help="the stick, or a full snapshot of it (rekfix snapshot --full)")
+    p.add_argument("target", help="the stick to copy onto: freshly formatted (FAT32), or an earlier clone")
+    p.add_argument("--audio-from", action="append", metavar="DIR",
+                   help="your music library: audio is taken from here when the same file (name and size) is "
+                        "found, so the source is read less; needed when the source is a snapshot")
+    p.add_argument("--skip", action="append", metavar="FOLDER", help='a top-level folder to leave out, e.g. "PIONEER REC"')
+    p.add_argument("--apply", action="store_true", help="copy (otherwise a dry run)")
+    p.add_argument("--allow-missing", action="store_true", help="clone even if some files can't be found")
+    p.add_argument("--remove-extra", action="store_true",
+                   help="when refreshing a clone, delete target files the source no longer has")
+    p.add_argument("--verify-only", action="store_true",
+                   help="compare an existing copy with the source, byte for byte; copies nothing")
+    p.add_argument("--no-verify", action="store_true", help="skip reading each file back (faster, not advised)")
+    p.set_defaults(fn=cmd_clone)
 
     p = sub.add_parser("history", help="play histories the decks saved")
     p.add_argument("target")

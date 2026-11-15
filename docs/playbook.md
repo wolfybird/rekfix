@@ -209,10 +209,33 @@ run hot.
 - Copy what you can now: `rekfix snapshot E:\ D:\backup --full`, then the music.
 - Stop writing to it, and replace it.
 - Rebuild the new stick from the snapshot plus your library's copies of the audio, with no
-  rekordbox export. That keeps deck histories and cues; see
-  [2026-10-flaky-listing](cases/2026-10-flaky-listing.md).
+  rekordbox export:
+  `rekfix clone D:\backup\<snapshot> F:\ --audio-from D:\Music --apply`.
+  - The failing stick is barely read again.
+  - Deck histories and cues are kept.
+  - Every file is read back from the new stick.
+
+  See [2026-10-flaky-listing](cases/2026-10-flaky-listing.md).
 - `rekfix readtest E:\` shows how the stick reads. A healthy one reads its database at well over
   50 MB/s with no read slower than a few milliseconds.
+
+## Keeping a spare stick
+
+A second stick in the bag, identical to the first, turns a dead stick at a gig into a swap.
+Don't make it with a rekordbox export: an export loses the deck histories and deck-set cues on
+the main stick, and risks merged playlists.
+
+1. Format the spare as FAT32 (older players read nothing else).
+2. `rekfix clone E:\ F:\ --audio-from D:\Music` shows the plan. Add `--apply` to copy.
+   - Audio is taken from your library where the same file is there.
+   - Every file is read back from the spare.
+   - It refuses a spare that's too small, or that holds another library.
+3. After each rekordbox export to the main stick, run the same command again. Only what changed
+   is copied; `--remove-extra` also deletes what the main stick no longer has.
+4. Let rekordbox manage the main stick only. Plug the spare into rekordbox and it may write to
+   it, and the two drift apart.
+
+`rekfix clone E:\ F:\ --verify-only` compares the two byte for byte at any time.
 
 ## Lost deck histories or cues after a re-export
 
