@@ -83,6 +83,38 @@ Flash wear ("bit rot") on an old, hot-running stick is a common cause.
 
 Case: [2026-07-database-bitrot](cases/2026-07-database-bitrot.md).
 
+## Your rekordbox library is gone, but a stick survives
+
+A dead laptop, a reinstall, a wiped drive: rekordbox opens empty, and the stick you play from is
+the only copy of your library. Don't export anything to that stick, and don't let rekordbox
+"fix" or delete its library.
+
+**Fix:**
+1. **Copy the stick off first:** `rekfix snapshot E:\ D:\backup --full`, plus its `Contents`
+   folder (the audio) to the computer, e.g. `D:\stick-copy\Contents`.
+2. **Check it:** `rekfix check E:\`. If it reports damage, add `--scan` to the next step.
+3. **Rebuild:** `rekfix rebuild E:\ D:\library.xml --music D:\stick-copy --all-audio`. Read the
+   summary and the `.report.txt` next to the XML: what was found, what's missing, which matches
+   to look at.
+4. **Import** into rekordbox: Preferences > Advanced > Database > rekordbox xml, choose the file,
+   then import its playlists from the "rekordbox xml" tree.
+5. **Let rekordbox analyse** anything that came without analysis, check a few tracks' cues and
+   grids, then **export to a new stick**. Keep the old one as it is until the new one has played
+   on your decks.
+
+**What comes back:**
+- tracks with their metadata, key and BPM;
+- beat grids;
+- hot cues, memory cues and loops, with names and colours;
+- playlists in their folders;
+- play histories, as playlists in their own folder.
+
+**What doesn't:** waveforms and phrase analysis, which rekordbox regenerates; and My Tags, for
+now.
+
+Case: [2026-07-database-bitrot](cases/2026-07-database-bitrot.md): 13,216 tracks, 57
+playlists and 191 play histories back from a rotting stick, with no rekordbox library behind it.
+
 ## rekordbox keeps saying "device library is corrupted", even after a repair
 
 **What you see:** the prompt comes back every time the stick is plugged in, no matter what you
