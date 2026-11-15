@@ -20,10 +20,12 @@ def utf16(s):
 
 
 def track_row(tid, title, path, artist_id=1, size=1000, duration=200, title_enc=short, album_id=0, genre_id=0,
-              label_id=0, artwork_id=0):
+              label_id=0, artwork_id=0, key_id=0, tempo=12800):
     fixed = bytearray(0x88)
     struct.pack_into("<I", fixed, 0x10, size)
     struct.pack_into("<I", fixed, 0x1C, artwork_id)
+    struct.pack_into("<I", fixed, 0x20, key_id)
+    struct.pack_into("<I", fixed, 0x38, tempo)
     struct.pack_into("<I", fixed, 0x28, label_id)
     struct.pack_into("<I", fixed, 0x3C, genre_id)
     struct.pack_into("<I", fixed, 0x40, album_id)
@@ -123,6 +125,72 @@ def audio_path(i):
     return f"/Contents/Artist/Album/{i:02d} Track {i}.mp3"
 
 
+# ------------------------------------------------------------ analysis files (big-endian)
+def cue_entry(cue, ext):
+    """cue: (hot, start ms, end ms or None, name, rgb or None, deck?). PCPT for the .DAT; PCP2 for
+    the .EXT, 44 bytes as a deck writes it, or rekordbox's longer entry with a name and colour."""
+    hot, start, end, name, rgb, deck = cue
+    if not ext:
+        e = bytearray(56)
+        e[0:4] = b"PCPT"
+        struct.pack_into(">III", e, 4, 28, 56, hot)
+        struct.pack_into(">I", e, 16, 1)
+        e[28] = 2 if end else 1
+        struct.pack_into(">II", e, 32, start, end if end else 0xFFFFFFFF)
+        return bytes(e)
+    if deck:
+        e = bytearray(44)
+        e[0:4] = b"PCP2"
+        struct.pack_into(">III", e, 4, 16, 44, hot)
+        e[16] = 2 if end else 1
+        struct.pack_into(">II", e, 20, start, end or 0)          # a deck writes 0 for "no loop end"
+        return bytes(e)
+    text = (name + "\x00").encode("utf-16-be") if name else b""
+    length = max(88, 44 + len(text) + 4)
+    e = bytearray(length)
+    e[0:4] = b"PCP2"
+    struct.pack_into(">III", e, 4, 16, length, hot)
+    e[16] = 2 if end else 1
+    struct.pack_into(">II", e, 20, start, end if end else 0xFFFFFFFF)
+    struct.pack_into(">I", e, 40, len(text))
+    e[44:44 + len(text)] = text
+    if rgb:
+        e[44 + len(text):48 + len(text)] = bytes((1,) + tuple(rgb))
+    return bytes(e)
+
+
+def anlz_file(path, beats=(), cues=(), ext=False):
+    """A minimal ANLZ0000.DAT (ext=False) or .EXT: PMAI header, PPTH, PQTZ (.DAT only), and the
+    memory and hot cue lists."""
+    sections = []
+    p = (path + "\x00").encode("utf-16-be")
+    sections.append(b"PPTH" + struct.pack(">III", 16, 16 + len(p), len(p)) + p)
+    if beats and not ext:
+        body = b"".join(struct.pack(">HHI", b, t, ms) for b, t, ms in beats)
+        sections.append(b"PQTZ" + struct.pack(">IIIII", 24, 24 + len(body), 0, 0x80000, len(beats)) + body)
+    for ltype in (0, 1):
+        entries = [cue_entry(c, ext) for c in cues if (c[0] > 0) == bool(ltype)]
+        body = b"".join(entries)
+        if ext:
+            hdr = b"PCO2" + struct.pack(">IIIHH", 20, 20 + len(body), ltype, len(entries), 0)
+        else:
+            hdr = b"PCOB" + struct.pack(">IIIHHi", 24, 24 + len(body), ltype, 0, len(entries), -1)
+        sections.append(hdr + body)
+    data = b"".join(sections)
+    return b"PMAI" + struct.pack(">II", 28, 28 + len(data)) + bytes(16) + data
+
+
+def write_anlz(root, folder, path, beats=(), cues=()):
+    """Write both analysis files for a track under root/PIONEER/USBANLZ/<folder>/."""
+    import os
+    d = os.path.join(root, "PIONEER", "USBANLZ", *folder.split("/"))
+    os.makedirs(d, exist_ok=True)
+    for ext, name in ((False, "ANLZ0000.DAT"), (True, "ANLZ0000.EXT")):
+        with open(os.path.join(d, name), "wb") as fh:
+            fh.write(anlz_file(path, beats, cues, ext))
+    return os.path.join(d, "ANLZ0000.DAT")
+
+
 def build(tracks=3, entries_per_list=None, heavy_menu=True, extra_pages=None, history=(1, 2)):
     """A complete little export.pdb as bytes. Tables 0-19 each get one data page (tracks get two,
     chained), so chains, rows and cross-references are all exercised. With more than one track,
@@ -133,7 +201,8 @@ def build(tracks=3, entries_per_list=None, heavy_menu=True, extra_pages=None, hi
     own = lambda i: 2 if other and i == tracks else 1
     rows = {t: [] for t in range(20)}
     rows[0] = [track_row(i, f"Track {i}", audio_path(i), artist_id=own(i), album_id=own(i), genre_id=own(i),
-                         label_id=own(i), artwork_id=i) for i in range(1, tracks + 1)]
+                         label_id=own(i), artwork_id=i, key_id=1) for i in range(1, tracks + 1)]
+    rows[5] = [struct.pack("<II", 1, 1) + short("Am")]
     rows[1] = [id_name_row(1, "House")] + ([id_name_row(2, "Techno")] if other else [])
     rows[2] = [artist_row(1, "Artist")] + ([artist_row(2, "Other Artist")] if other else [])
     rows[3] = [album_row(1, "Album", 1)] + ([album_row(2, "Other Album", 2)] if other else [])

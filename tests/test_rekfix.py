@@ -135,6 +135,11 @@ class Damage(unittest.TestCase):
             found = check.files(pdb, root)
             self.assertIn("files.audio", codes(found))
             self.assertIn("1 tracks", next(str(f) for f in found if f.code == "files.audio").replace(",", ""))
+            self.assertNotIn("rekordbox.broken-marker", codes(found))
+            os.makedirs(os.path.join(root, "PIONEER", "rekordbox"))
+            with open(os.path.join(root, "PIONEER", "rekordbox", "brokendb"), "wb") as fh:
+                fh.write(b" ")
+            self.assertIn("rekordbox.broken-marker", codes(check.files(pdb, root)))
 
 
 class Commands(unittest.TestCase):

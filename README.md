@@ -39,6 +39,9 @@ pipx install "git+https://github.com/wolfybird/rekfix"
    - what an earlier removal of tracks left behind, such as a song count the decks show wrong.
 3. **Look up the symptom** in [docs/playbook.md](docs/playbook.md): what it usually means, how
    to confirm it, and what fixes it.
+4. **If the database is beyond repair,** `rekfix rebuild` gathers everything it can into a
+   rekordbox XML file, to import into rekordbox and export a fresh stick from. Do this before
+   anything wipes the stick.
 
 ## Commands
 
@@ -48,6 +51,7 @@ pipx install "git+https://github.com/wolfybird/rekfix"
 | `diff OLD NEW` | what changed between two copies of export.pdb: rows, pages, playlists, root menu, histories |
 | `menu STICK [--hide ...\|--show ...] [--apply]` | the players' root browse menu; hide the categories that freeze older decks on big libraries |
 | `prune STICK [--restore-from DIR] [--restore-all] [--apply]` | remove tracks whose audio is gone from the stick, the way rekordbox removes tracks; keeps (or copies back) any a play history lists |
+| `rebuild STICK OUT.xml [--music DIR] [--scan] [--all-audio]` | recover the library, even from a damaged stick, as rekordbox XML: metadata, key, BPM, beat grids, hot and memory cues, loops, playlists, play histories |
 | `history STICK [--tracks] [--scan]` | the play histories the decks saved on the stick |
 | `snapshot STICK DEST [--full]` | databases + file list, before you change anything |
 | `readtest STICK` | how fast and evenly the stick reads (Windows: bypassing the cache) |

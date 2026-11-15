@@ -13,6 +13,7 @@ PIONEER/
   rekordbox/exportExt.pdb     extra tables (tags...), same page format
   rekordbox/exportLibrary.db  "OneLibrary": an encrypted SQLite database newer gear reads
   rekordbox/RBFLTR.DAT        the deck's track filter (BPM range, keys), written by the deck
+  rekordbox/brokendb          rekordbox's "this library is broken" marker (see the playbook)
   USBANLZ/Pxxx/xxxxxxxx/      per-track analysis: ANLZ0000.DAT, .EXT, .2EX (waveforms, beat grid, cues)
   Artwork/                    cover art thumbnails
   DEVSETTING.DAT, djprofile.nxs, CDJ/, MPJ/   player settings, your DJ profile
@@ -87,6 +88,39 @@ Every page has a 0x28-byte header; rows follow from +28:
 
 The 0x10 flag is consistent across rekordbox's own files: on a 2,975-page export, all 283
 pages with deleted rows had it, and no other page did.
+
+### Index pages and spare pages
+
+A table's first page is an index page, which rekordbox always fills in, even for an empty table:
+
+| offset | size | |
+|---|---|---|
+| 20 | 2 × u16 | 0x1FFF, 0x1FFF |
+| 24 | u16 | 0x03EC: entry slots (1,004) |
+| 26 | u16 | entries in use |
+| 28 | u32 | this page's own number |
+| 2C | u32 | the table's next page (0x03FFFFFF if none) |
+| 30 / 34 | u32 | 0x03FFFFFF, 0 |
+| 38 / 3A | u16 | entries in use again, 0x1FFF |
+| 3C | 1,004 × u32 | entries; 0x1FFFFFF8 = empty |
+
+A table with rows can still have no entries in use (rekordbox's genres table did).
+
+Each table's descriptor in the file header names an **empty candidate**: the page its next write
+goes to.
+- In rekordbox's files that's a free page (all zeros), or one just past the end of the file.
+- The last page of the table's chain points at it.
+- The header's next-unused page comes after the highest one.
+
+Rebuilding a header from its pages (index pages, then chains, then each chain end's "next")
+reproduces rekordbox's own headers exactly. That was tested on a 3,124-page `export.pdb` and its
+`exportExt.pdb`.
+
+**Trap: hand-built files skip all this.** July's rebuilt `export.pdb` had blank index pages and
+every empty candidate pointing at a page in use. Its `exportExt.pdb` carried a header copied from
+an old `export.pdb` (20 tables, pages up to 1,891, in an 18-page file). rekordbox called the
+stick corrupted. With those fixed it got further, then crashed. What else it checks is still
+open.
 
 **Trap: the byte at +18 is not the row count.** It's only the low byte of the 13-bit slot
 count. Reading it alone silently loses rows on any page holding more than 255, which happens
@@ -232,16 +266,52 @@ Big-endian, unlike `export.pdb`. An `FMAI` header carries the writing model and 
 The high byte looks like an on/off flag (01 = on). The deck recreates the file if it's
 missing.
 
-## Analysis files: cues
+## Analysis files: paths, beat grids, cues
 
-Cues live in the analysis files, not in `export.pdb`:
-- **ANLZ0000.DAT:** `PCOB` lists of 56-byte `PCPT` entries (memory cues: list type 0;
-  hot cues: type 1).
-- **ANLZ0000.EXT:** `PCO2` lists of `PCP2` entries:
-  - rekordbox writes them 88 bytes long, plus a comment;
-  - an XDJ-1000MK2 writes them **44 bytes** long, with no comment or colour.
+Each track has a folder `USBANLZ/Pxxx/xxxxxxxx/` with `ANLZ0000.DAT` and `.EXT` (and sometimes
+`.2EX`). Each file is `PMAI` plus a header, then sections: a fourcc, a u32 header length and a u32
+section length.
 
-Hot cue numbers in a PCPT/PCP2 entry are 1–8 for A–H, and 0 for a memory cue.
+- **PPTH** (both files): the audio file's path on the stick, UTF-16BE. Every analysis file
+  checked had one. It links the analysis to its track without `export.pdb`.
+- **PQTZ** (.DAT): the beat grid. The beat count is at +20, and entries start after the 24-byte
+  header, 8 bytes per beat: beat in the bar (u16), tempo × 100 (u16), time in ms (u32).
+- **PCOB** (.DAT, legacy) and **PCO2** (.EXT): cue lists, two of each.
+  - List type (+12): 0 = memory cues, 1 = hot cues.
+  - Entry count: +18 in PCOB, +16 in PCO2.
+  - Each entry starts with its own fourcc and lengths.
+- **PWAV, PWV2–5, PSSI, PVBR**...: waveforms, song structure, seek index. Not needed to
+  rebuild a library; rekordbox can't import them.
+
+**Cue entries:**
+- **`PCPT`** (in PCOB) is 56 bytes:
+  - hot cue number at +12;
+  - type at +28 (1 = cue, 2 = loop);
+  - time at +32 (ms);
+  - loop end at +36.
+- **`PCP2`** (in PCO2):
+  - hot cue number at +12;
+  - type at +16;
+  - time at +20 (ms);
+  - loop end at +24;
+  - name length at +40, then the name (UTF-16BE);
+  - then a colour code and RGB.
+
+  rekordbox writes PCP2 entries 88 bytes or longer. An XDJ-1000MK2 writes them **44 bytes** long,
+  with no name or colour.
+
+Hot cue numbers are 1–8 for A–H, and 0 for a memory cue.
+
+**Trap: "no loop end" has two spellings.** rekordbox writes 0xFFFFFFFF; a deck writes 0. Decide
+"loop or not" from the type field.
+
+**Trap: a damaged `export.pdb` can point a track at another track's analysis.** On the rotted
+stick, 407 tracks' analysis paths led to folders whose PPTH named a different file. `rekfix
+rebuild` checks each one against its PPTH, and otherwise looks the track up by its own path among
+all the PPTHs.
+
+On one stick, 7,554 of 12,527 memory cues sat exactly on their track's first beat, probably set
+automatically at some point. They're real entries, and a rebuild keeps them.
 
 **Trap:** some parsers (pyrekordbox's `AnlzFile`, at the time of writing) fail on the 44-byte
 entries a deck writes. Walk the tags by hand: each tag has a fourcc, u32 header length and

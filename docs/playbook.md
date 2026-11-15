@@ -65,13 +65,46 @@ Flash wear ("bit rot") on an old, hot-running stick is a common cause.
 2. **Recover what's in the database:** `rekfix check E:\ --scan --tables` and
    `rekfix history E:\ --scan --tracks` read it page by page, ignoring the damaged header and
    chains.
-3. **Rebuild the library in rekordbox from that,** then export a fresh stick. With no
-   rekordbox library behind the stick, a rekordbox XML import (tracks, cues from the analysis
-   files, playlists, histories) worked. Patching the binary file by hand didn't: the players
-   showed 0 songs every time. See the case.
+3. **Rebuild the library in rekordbox from that,** then export a fresh stick:
+   `rekfix rebuild E:\ library.xml --scan --music D:\stick-copy`. It gathers into one rekordbox
+   XML file:
+   - every track's metadata, key and BPM;
+   - the beat grids, hot cues, memory cues and loops from the analysis files (including ones
+     set on the decks);
+   - the playlists, and the decks' play histories as playlists.
+
+   Copy the stick's `Contents` folder to the computer first and point `--music` at the copy, so
+   the new library doesn't depend on the old stick. Then import the XML in rekordbox
+   (Preferences > Advanced > Database > rekordbox xml).
+
+   Patching the binary file by hand didn't work: the players showed 0 songs every time. See the
+   case.
 4. **Replace the stick** if it also shows the "flaky stick" signs below.
 
 Case: [2026-07-database-bitrot](cases/2026-07-database-bitrot.md).
+
+## rekordbox keeps saying "device library is corrupted", even after a repair
+
+**What you see:** the prompt comes back every time the stick is plugged in, no matter what you
+fix.
+
+**Usually means:** rekordbox has left a marker file, `PIONEER\rekordbox\brokendb` (one byte).
+
+On a test stick it wrote one when reading the library failed partway, once right after crashing
+on it. While the marker was there, rekordbox kept reporting the library as corrupted, apparently
+without reading it again: fixes made after the marker appeared changed nothing until it was moved
+aside. Not every "corrupted" prompt leaves a marker; earlier prompts on the same stick hadn't.
+
+**Confirm:** `rekfix check E:\` reports `rekordbox.broken-marker`.
+
+**Fix:**
+1. Find out why rekordbox failed first. If the marker is the only thing wrong, `check` is clean
+   otherwise.
+2. Then move the marker out of `PIONEER\rekordbox` (keep it), and plug the stick in again.
+
+If rekordbox fails again, it writes a fresh marker, and the database needs more work. Never
+answer "Yes" to the prompt on a stick whose histories or deck cues you want: it deletes the
+device library.
 
 ## Playlists on the stick contain other playlists' tracks
 
