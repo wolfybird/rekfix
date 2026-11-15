@@ -85,6 +85,7 @@ When a stick fails before a gig, or it's the only copy of your library left:
 | `menu STICK [--hide ...\|--show ...] [--apply]` | the players' root browse menu; hide the categories that freeze older decks on big libraries |
 | `prune STICK [--restore-from DIR] [--restore-all] [--apply]` | remove tracks whose audio is gone from the stick, the way rekordbox removes tracks; keeps (or copies back) any a play history lists |
 | `rebuild STICK OUT.xml [--music DIR] [--scan] [--all-audio]` | recover the library, even from a damaged stick, as rekordbox XML: metadata, key, BPM, beat grids, hot and memory cues, loops, playlists, play histories |
+| `clone SOURCE TARGET [--audio-from DIR] [--apply]` | an exact copy of a stick on another, without rekordbox: keeps deck histories and deck cues, reads every file back, refreshes by copying only what changed |
 | `history STICK [--tracks] [--scan]` | the play histories the decks saved on the stick |
 | `snapshot STICK DEST [--full]` | databases + file list, before you change anything |
 | `readtest STICK` | how fast and evenly the stick reads (Windows: bypassing the cache) |
@@ -102,6 +103,10 @@ does: page counts and flags, and a new sequence number.
 **After editing,** `prune` re-reads the result from scratch before saving. It checks that the
 result is what was planned, and that no byte outside the fields it meant to change is
 different.
+
+`clone --apply` writes only to the target stick, and never to the source. It refuses a target
+that holds another library, too little space, or files FAT32 can't hold. Every file is read back
+and checked against what was written.
 
 ## What it's built from
 

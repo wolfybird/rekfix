@@ -14,6 +14,10 @@ What exists:
   - The audio is found by path, name, size or a shortened name.
   - Analysis is matched by the path each analysis file names. That works with no database at
     all, and it refuses analysis the database points at wrongly.
+- **`clone`: an exact copy of a stick on another, without rekordbox.**
+  - Copies from the stick, or from a `--full` snapshot plus the music library.
+  - Writes the databases last and reads every file back.
+  - A later run copies only what changed.
 
 How they were checked against real sticks:
 - **`prune`** reproduces the [merged-playlists case](cases/2026-10-merged-playlists.md)'s hand
@@ -25,18 +29,16 @@ How they were checked against real sticks:
 - **`rebuild`'s cue reader, against the user's own rekordbox library:** it matches on 7,531 of
   7,549 tracks with cues. The 18 differences are cues edited in rekordbox since, or set on the
   decks.
+- **`clone`, on the [flaky-listing case](cases/2026-10-flaky-listing.md)'s snapshot:**
+  - planning all 74,519 files took 8 seconds, matching 13,207 audio files to the library;
+  - a real copy of 61,310 files, read back one by one, had no mismatches;
+  - planning a refresh found nothing to copy.
 
 Next, in the order the stick owner asked for:
 
-1. **`rekfix clone`: make an exact copy of a stick** from a snapshot plus a music library,
-   without a rekordbox export, then read back every file
-   ([flaky-listing case](cases/2026-10-flaky-listing.md)).
-   - Keeps deck histories, deck-set cues and hand repairs, which an export loses.
-   - Refreshing a clone copies only what changed.
-   - Conditions:
-     - a healthy source (`check` clean; `prune` first);
-     - a FAT32 target at least as large as what's used;
-     - only one copy managed by rekordbox.
+1. **A GUI**: the same design language as mixarchive's app (HTML in a desktop window), with
+   mockups first. The flows: pick a stick, check it, and the dry run, confirmation and apply
+   for each repair, plus the last-ditch rescue as a guided path.
 2. **`rekfix playlists`: compare and repair playlists against a rekordbox library.**
    - Read rekordbox's `master.db` (optional pyrekordbox dependency) or a rekordbox XML export.
    - Report merged, missing and reordered entries in both stick databases.

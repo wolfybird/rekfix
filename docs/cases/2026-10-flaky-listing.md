@@ -32,6 +32,24 @@ up in the first two listings and in none of the other four, with nothing writing
 (see the [July case](2026-07-database-bitrot.md)). The plan was to read back every file after
 building the copy, and to replace the stick at the first sign of trouble.
 
+## `rekfix clone` now does this
+
+In November the approach became a command:
+`rekfix clone <snapshot> F:\ --audio-from <library> --apply`.
+- It takes the `PIONEER` folder from a `--full` snapshot and each audio file from the library
+  where the same name and size are found, so the main stick is barely read.
+- It writes the databases last.
+- It reads every file back, bypassing the system cache.
+- A later run copies only what changed.
+
+**Planning on this stick's snapshot** (74,519 files, 180 GB) took eight seconds:
+- 13,207 of the audio files (174 GB) were matched in the library;
+- two weren't in the folders given;
+- a target with too little space was refused.
+
+**A real copy of the 61,310-file `PIONEER` folder,** read back file by file, took six minutes with
+no mismatches. Planning a refresh right after found nothing to copy.
+
 ## Lessons
 
 - **A clone beats an export** when the stick holds anything rekordbox doesn't.

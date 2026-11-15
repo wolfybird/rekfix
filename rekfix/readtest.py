@@ -53,6 +53,44 @@ else:
                 out.append((dt, len(b)))
         return out
 
+def read_uncached(path, chunk=1 << 20):
+    """Yield a file's bytes as the device returns them, not from the system's cache: what's
+    really on the stick. Windows: unbuffered reads. macOS: F_NOCACHE. Linux: the file's cached
+    pages are dropped first (they're clean once the copy was synced)."""
+    if sys.platform == "win32":
+        h = _k32.CreateFileW(path, 0x80000000, 3, None, 3, 0x20000000, None)
+        if h == _INVALID:
+            raise OSError(ctypes.get_last_error(), path)
+        raw = ctypes.create_string_buffer(chunk + 4096)
+        buf = (ctypes.addressof(raw) + 4095) & ~4095
+        n = wt.DWORD()
+        try:
+            while True:
+                if not _k32.ReadFile(h, buf, chunk, ctypes.byref(n), None):
+                    raise OSError(ctypes.get_last_error(), path)
+                if not n.value:
+                    return
+                yield ctypes.string_at(buf, n.value)
+                if n.value < chunk:
+                    return
+        finally:
+            _k32.CloseHandle(h)
+    with open(path, "rb", buffering=0) as fh:
+        try:
+            if sys.platform == "darwin":
+                import fcntl
+                fcntl.fcntl(fh.fileno(), getattr(fcntl, "F_NOCACHE", 48), 1)
+            elif hasattr(os, "posix_fadvise"):
+                os.posix_fadvise(fh.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+        except OSError:
+            pass
+        while True:
+            b = fh.read(chunk)
+            if not b:
+                return
+            yield b
+
+
 AUDIO = (".mp3", ".wav", ".aif", ".aiff", ".flac", ".m4a", ".mp4", ".alac")
 
 
