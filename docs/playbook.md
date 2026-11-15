@@ -2,6 +2,9 @@
 
 Before trying any fix:
 
+0. **Nothing that deletes comes first.** rekordbox's "delete the device library?", formatting,
+   and re-exporting all wipe what exists only on the stick: deck histories, deck-set cues, and
+   the whole library if rekordbox's copy is gone. Every situation below can wait for a copy.
 1. **Snapshot the stick**: `rekfix snapshot E:\ D:\stick-backups`. Most fixes are reversible
    only if you have a copy.
 2. **Close rekordbox.** It writes to a stick as soon as it sees it: it bumps the database's
