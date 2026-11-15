@@ -7,6 +7,7 @@
   rekfix menu E:\\ --hide time,bitrate,"file name","hot cue bank" --apply
   rekfix prune E:\\                 tracks whose audio is gone: what removing them would change
   rekfix prune E:\\ --restore-from D:\\Music --apply
+  rekfix rebuild E:\\ library.xml --music D:\\stick-copy   recover the library for rekordbox
   rekfix history E:\\               play histories the decks saved
   rekfix snapshot E:\\ D:\\backups   copy the databases + list every file, before anything else
   rekfix readtest E:\\              how fast and evenly the stick reads
@@ -22,7 +23,7 @@ import subprocess
 import sys
 from collections import Counter, defaultdict
 
-from . import __version__, check, menu, prune, readtest, snapshot
+from . import __version__, check, menu, prune, readtest, rebuild, snapshot
 from .pdb import TABLES, Pdb
 
 
@@ -197,6 +198,28 @@ def cmd_prune(a):
     return 0
 
 
+def cmd_rebuild(a):
+    if not os.path.isdir(a.source):
+        raise SystemExit("rebuild reads a stick, or a full copy of one: a folder with PIONEER (and Contents) in it")
+    out = os.path.abspath(a.out)
+    rb = rebuild.collect(a.source, a.music or (), a.pdb, a.scan, a.second_word, a.all_audio)
+    rebuild.write_xml(rb, out)
+    report = os.path.splitext(out)[0] + ".report.txt"
+    rebuild.write_report(rb, report)
+    for line in rebuild.report_lines(rb):
+        print(" ", line)
+    problems = rebuild.verify_xml(out, rb)
+    for p in problems:
+        print("  !", p)
+    print(f"written: {out} ({len(rb.items):,} tracks); the details are in {report}")
+    if not a.music:
+        print("note: the XML points at the audio where it is now. If that's the stick itself, copy its Contents "
+              "folder to your computer first and pass --music, so your rekordbox library doesn't depend on the stick.")
+    print("to import: rekordbox > Preferences > Advanced > Database > rekordbox xml: choose this file; show the "
+          "\"rekordbox xml\" tree (Preferences > View > Layout), then right-click a playlist > Import Playlist.")
+    return 1 if problems else 0
+
+
 def cmd_history(a):
     pdb = Pdb.open(pdb_path(a.target)[0], scan=a.scan, second_word=a.second_word)
     lists = pdb.history_playlists()
@@ -268,6 +291,20 @@ def main(argv=None):
     p.add_argument("--backup-dir", help="where the copy of export.pdb goes (default: next to it)")
     p.add_argument("-v", "--verbose", action="store_true", help="list every track affected")
     p.set_defaults(fn=cmd_prune)
+
+    p = sub.add_parser("rebuild", help="recover the library as rekordbox XML: tracks, key, BPM, beat grids, cues, "
+                                        "playlists, play histories")
+    p.add_argument("source", help="the stick, or a full copy of it (a folder with PIONEER and Contents)")
+    p.add_argument("out", help="the XML file to write")
+    p.add_argument("--music", action="append", metavar="DIR",
+                   help="where the audio is for rekordbox to import from: a copy of the stick or of its Contents "
+                        "folder, or your music library (default: the source)")
+    p.add_argument("--pdb", help="use this export.pdb (e.g. a saved copy) instead of the source's")
+    p.add_argument("--scan", action="store_true", help="recovery read of a damaged export.pdb (see check --scan)")
+    p.add_argument("--second-word", action="store_true", help="see check --second-word")
+    p.add_argument("--all-audio", action="store_true",
+                   help="also add audio files the database doesn't list, with their analysis")
+    p.set_defaults(fn=cmd_rebuild)
 
     p = sub.add_parser("history", help="play histories the decks saved")
     p.add_argument("target")

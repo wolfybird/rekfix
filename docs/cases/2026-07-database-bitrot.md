@@ -55,6 +55,23 @@ The decks clearly validate something beyond the page format, and it was never id
 3. Write all of it as a rekordbox XML file, import that into a fresh rekordbox library, and
    export a new stick from it.
 
+**`rekfix rebuild` now does this in one command.** Replayed in November on the same backup, with
+the recovery read and the WAV/AIFF files that had since moved to another folder, it took under a
+minute and:
+- found all 13,216 audio files, 12,962 at their database paths and 245 by name;
+- placed **all 7,416 playlist entries and all 2,700 history plays**;
+- recovered 12,749 beat grids and 396 hot cues. July's hand-built pipeline got 9,714 and 288;
+  its cue parser had a bug.
+
+It also refused 407 analysis folders the damaged database pointed at: the file each folder names
+is a different track. Using them would have given those tracks someone else's beat grid and cues.
+
+Later still, the hand-built `export.pdb` from the attempts above, still on the old stick, was
+compared with a database rekordbox wrote. It differed in ways July never checked: every table's
+"empty candidate" page was a page in use, and every index page was blank. With both fixed,
+rekordbox got further, then crashed reading it. See
+[the roadmap's open questions](../roadmap.md#open-questions).
+
 ## Lessons
 
 - **Copy everything off a misbehaving stick first.** This one died mid-recovery; the backup made

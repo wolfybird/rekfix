@@ -6,48 +6,76 @@ What exists:
 - two repairs:
   - hiding root categories (`menu`);
   - removing tracks whose audio is gone (`prune`). It keeps tracks a play history lists, can
-    copy audio back, and tidies what earlier removals left behind.
+    copy audio back, and tidies what earlier removals left behind;
+- **`rebuild`: a damaged or lost library as rekordbox XML.**
+  - From the database, even a recovery read: tracks with their metadata, key and BPM;
+    playlists; play histories.
+  - From the analysis files: beat grids, hot cues, memory cues and loops.
+  - The audio is found by path, name, size or a shortened name.
+  - Analysis is matched by the path each analysis file names. That works with no database at
+    all, and it refuses analysis the database points at wrongly.
 
-`prune` reproduces the [merged-playlists case](cases/2026-10-merged-playlists.md)'s hand fix
-exactly: replayed on a copy of that stick's database, it deleted the same 5,642 track rows,
-bit for bit.
+How they were checked against real sticks:
+- **`prune`** reproduces the [merged-playlists case](cases/2026-10-merged-playlists.md)'s hand
+  fix exactly: replayed on a copy of that stick's database, it deleted the same 5,642 track
+  rows, bit for bit.
+- **`rebuild`, on the [bit-rot case](cases/2026-07-database-bitrot.md)'s backup:** it found all
+  13,216 audio files, placed all 7,416 playlist entries and 2,700 history plays, and recovered
+  more beat grids and hot cues than July's hand-built pipeline.
+- **`rebuild`'s cue reader, against the user's own rekordbox library:** it matches on 7,531 of
+  7,549 tracks with cues. The 18 differences are cues edited in rekordbox since, or set on the
+  decks.
 
-Next, roughly in order of how often they'd have helped:
+Next, in the order the stick owner asked for:
 
-1. **Deck-test `prune`'s tidy-up on a real stick:** the corrected song count, the leftover
-   artwork and the page flags. See the open questions below.
+1. **`rekfix clone`: make an exact copy of a stick** from a snapshot plus a music library,
+   without a rekordbox export, then read back every file
+   ([flaky-listing case](cases/2026-10-flaky-listing.md)).
+   - Keeps deck histories, deck-set cues and hand repairs, which an export loses.
+   - Refreshing a clone copies only what changed.
+   - Conditions:
+     - a healthy source (`check` clean; `prune` first);
+     - a FAT32 target at least as large as what's used;
+     - only one copy managed by rekordbox.
 2. **`rekfix playlists`: compare and repair playlists against a rekordbox library.**
    - Read rekordbox's `master.db` (optional pyrekordbox dependency) or a rekordbox XML export.
    - Report merged, missing and reordered entries in both stick databases.
    - Cut a merged playlist back to its own tracks by reusing its entry rows.
-3. **`rekfix rebuild-xml`: rebuild a lost library as a rekordbox XML file** from a damaged stick:
-   - the recovery read of `export.pdb`;
-   - the audio files' tags;
-   - cues, loops and beat grids from the analysis files.
-
-   Import the result into rekordbox, then export a fresh stick. This is the path that worked in
-   the [bit-rot case](cases/2026-07-database-bitrot.md); the tooling exists and needs
-   generalising.
-4. **`rekfix cues`: read and write cues in the analysis files.**
-   - Handle the 44-byte entries decks write.
-   - Import deck-set cues into rekordbox before a re-export, so they survive it.
-5. **`rekfix clone`: make an exact copy of a stick** from a snapshot plus a music library,
-   without a rekordbox export, then read back every file
-   ([flaky-listing case](cases/2026-10-flaky-listing.md)).
-6. **OneLibrary (`exportLibrary.db`) checks** next to the `export.pdb` ones, for newer players.
+3. **`rebuild` extras:**
+   - fill in metadata from the audio files' tags (optional mutagen) when database rows are
+     damaged;
+   - carry My Tags over from `exportExt.pdb`.
+4. **`rekfix cues`: write cues into the analysis files,** and import deck-set cues into
+   rekordbox before a re-export, so they survive it.
+5. **OneLibrary (`exportLibrary.db`) checks** next to the `export.pdb` ones, for newer players.
    The file is encrypted SQLite; pyrekordbox can open it.
-7. **A library-size advisor:**
+6. **A library-size advisor:**
    - track counts against what each player model handled in practice;
    - which categories to hide.
 
    Needs reports from other players: CDJ-2000NXS2, CDJ-900, XDJ-RX2...
+7. **Deck-test `prune`'s tidy-up on a real stick:** the corrected song count, the leftover
+   artwork and the page flags.
 
-Open questions worth testing on real decks:
+## Open questions
 
-- What makes players accept a rebuilt `export.pdb`? Hand-built files showed 0 songs. Candidates:
-  - the header's next-unused page and the empty-candidate pages;
-  - index pages;
-  - consistency with `exportExt.pdb`.
+- **What makes rekordbox (and players) accept a rebuilt `export.pdb`?** Hand-built files showed 0
+  songs on the decks, and rekordbox called them corrupted. Tested with rekordbox as the judge,
+  on a spare stick holding July's hand-built file:
+  1. Removing tracks whose audio was gone: still "corrupted".
+  2. Giving every index page rekordbox's layout, and every table a real empty-candidate page (see
+     [format.md](format.md#index-pages-and-spare-pages)): rekordbox read further, then wrote its
+     `brokendb` marker.
+  3. Rebuilding `exportExt.pdb`'s header, which had been copied from an old `export.pdb`:
+     masked by the marker. With the marker moved aside, rekordbox crashed reading the stick.
+
+  Still to try:
+  - the tables every export fills but the hand-built file left empty (colours, the category
+    names, the root menu, table 18, the song-count row in table 19);
+  - consistency with `exportLibrary.db`.
+
+  Best next step: let rekordbox export a few tracks to a wiped spare stick, as a tiny reference
+  database, then change one thing at a time on a copy.
 - What the second footer word means. Rows present only there were either deleted, or live on
   older exports.
 - At what track count each root category starts to freeze a given player.

@@ -104,6 +104,11 @@ class Track:
     label_id: int = 0
     artwork_id: int = 0
     key_id: int = 0
+    track_number: int = 0
+    disc_number: int = 0
+    play_count: int = 0
+    color_id: int = 0       # 1-8: the colors table (Pink ... Purple); 0 = none
+    rating: int = 0         # stars, 0-5
     strings: dict = field(default_factory=dict)
     string_errors: list = field(default_factory=list)
 
@@ -304,7 +309,9 @@ class Pdb:
                       year=self.u16(p + 0x50), artist_id=self.u32(p + 0x44), album_id=self.u32(p + 0x40),
                       composer_id=self.u32(p + 0x0C), original_artist_id=self.u32(p + 0x24),
                       remixer_id=self.u32(p + 0x2C), genre_id=self.u32(p + 0x3C), label_id=self.u32(p + 0x28),
-                      artwork_id=self.u32(p + 0x1C), key_id=self.u32(p + 0x20))
+                      artwork_id=self.u32(p + 0x1C), key_id=self.u32(p + 0x20), track_number=self.u32(p + 0x34),
+                      disc_number=self.u16(p + 0x4C), play_count=self.u16(p + 0x4E), color_id=self.data[p + 0x58],
+                      rating=self.data[p + 0x59])
             for name, i in TRACK_STRINGS.items():
                 text, err = self.string_at(row, self.u16(p + 0x5E + 2 * i))
                 t.strings[name] = text
@@ -329,6 +336,25 @@ class Pdb:
             near = self.data[row.pos + 9]
             rel = self.u16(row.pos + 10) if subtype == 0x64 else near
             out[self.u32(row.pos + 4)] = self.string_at(row, rel)[0]
+        return out
+
+    def names(self, typ):
+        """{id: name} of a simple lookup table: genres (1), labels (4), keys (5), colors (6), or
+        artwork (13, whose 'name' is the image's path)."""
+        id_at, name_at, wide = {1: (0, 4, 4), 4: (0, 4, 4), 5: (0, 8, 4), 6: (5, 8, 2), 13: (0, 4, 4)}[typ]
+        out = {}
+        for r in self.rows(typ) if typ in self.tables else ():
+            rid = self.u32(r.pos + id_at) if wide == 4 else self.u16(r.pos + id_at)
+            out[rid] = self.string_at(r, name_at)[0]
+        return out
+
+    def album_names(self):
+        """{album id: name}"""
+        out = {}
+        for r in self.rows(3) if 3 in self.tables else ():
+            far = self.u16(r.pos) == 0x84
+            rel = self.u16(r.pos + 0x16) if far else self.data[r.pos + 0x15]
+            out[self.u32(r.pos + 0x0C)] = self.string_at(r, rel)[0]
         return out
 
     def lookup_rows(self, typ):

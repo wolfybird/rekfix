@@ -237,8 +237,14 @@ def leftovers(pdb, tracks):
 
 
 def files(pdb, root, by_id=None):
-    """Tracks whose audio or analysis file isn't on the stick at `root`."""
+    """Tracks whose audio or analysis file isn't on the stick at `root`, and rekordbox's
+    broken-library marker."""
     found = []
+    if os.path.exists(os.path.join(root, "PIONEER", "rekordbox", "brokendb")):
+        found.append(Finding("warn", "rekordbox.broken-marker", "rekordbox has marked this stick's library as broken "
+                                                                "(PIONEER\\rekordbox\\brokendb): it crashed or failed "
+                                                                "reading it, and will say 'device library is corrupted' "
+                                                                "while the marker is there. See docs/playbook.md"))
     by_id = by_id if by_id is not None else pdb.tracks()
     missing_audio, missing_anlz = [], []
     for ts in by_id.values():

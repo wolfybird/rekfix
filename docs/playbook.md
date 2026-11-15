@@ -65,13 +65,78 @@ Flash wear ("bit rot") on an old, hot-running stick is a common cause.
 2. **Recover what's in the database:** `rekfix check E:\ --scan --tables` and
    `rekfix history E:\ --scan --tracks` read it page by page, ignoring the damaged header and
    chains.
-3. **Rebuild the library in rekordbox from that,** then export a fresh stick. With no
-   rekordbox library behind the stick, a rekordbox XML import (tracks, cues from the analysis
-   files, playlists, histories) worked. Patching the binary file by hand didn't: the players
-   showed 0 songs every time. See the case.
+3. **Rebuild the library in rekordbox from that,** then export a fresh stick:
+   `rekfix rebuild E:\ library.xml --scan --music D:\stick-copy`. It gathers into one rekordbox
+   XML file:
+   - every track's metadata, key and BPM;
+   - the beat grids, hot cues, memory cues and loops from the analysis files (including ones
+     set on the decks);
+   - the playlists, and the decks' play histories as playlists.
+
+   Copy the stick's `Contents` folder to the computer first and point `--music` at the copy, so
+   the new library doesn't depend on the old stick. Then import the XML in rekordbox
+   (Preferences > Advanced > Database > rekordbox xml).
+
+   Patching the binary file by hand didn't work: the players showed 0 songs every time. See the
+   case.
 4. **Replace the stick** if it also shows the "flaky stick" signs below.
 
 Case: [2026-07-database-bitrot](cases/2026-07-database-bitrot.md).
+
+## Your rekordbox library is gone, but a stick survives
+
+A dead laptop, a reinstall, a wiped drive: rekordbox opens empty, and the stick you play from is
+the only copy of your library. Don't export anything to that stick, and don't let rekordbox
+"fix" or delete its library.
+
+**Fix:**
+1. **Copy the stick off first:** `rekfix snapshot E:\ D:\backup --full`, plus its `Contents`
+   folder (the audio) to the computer, e.g. `D:\stick-copy\Contents`.
+2. **Check it:** `rekfix check E:\`. If it reports damage, add `--scan` to the next step.
+3. **Rebuild:** `rekfix rebuild E:\ D:\library.xml --music D:\stick-copy --all-audio`. Read the
+   summary and the `.report.txt` next to the XML: what was found, what's missing, which matches
+   to look at.
+4. **Import** into rekordbox: Preferences > Advanced > Database > rekordbox xml, choose the file,
+   then import its playlists from the "rekordbox xml" tree.
+5. **Let rekordbox analyse** anything that came without analysis, check a few tracks' cues and
+   grids, then **export to a new stick**. Keep the old one as it is until the new one has played
+   on your decks.
+
+**What comes back:**
+- tracks with their metadata, key and BPM;
+- beat grids;
+- hot cues, memory cues and loops, with names and colours;
+- playlists in their folders;
+- play histories, as playlists in their own folder.
+
+**What doesn't:** waveforms and phrase analysis, which rekordbox regenerates; and My Tags, for
+now.
+
+Case: [2026-07-database-bitrot](cases/2026-07-database-bitrot.md): 13,216 tracks, 57
+playlists and 191 play histories back from a rotting stick, with no rekordbox library behind it.
+
+## rekordbox keeps saying "device library is corrupted", even after a repair
+
+**What you see:** the prompt comes back every time the stick is plugged in, no matter what you
+fix.
+
+**Usually means:** rekordbox has left a marker file, `PIONEER\rekordbox\brokendb` (one byte).
+
+On a test stick it wrote one when reading the library failed partway, once right after crashing
+on it. While the marker was there, rekordbox kept reporting the library as corrupted, apparently
+without reading it again: fixes made after the marker appeared changed nothing until it was moved
+aside. Not every "corrupted" prompt leaves a marker; earlier prompts on the same stick hadn't.
+
+**Confirm:** `rekfix check E:\` reports `rekordbox.broken-marker`.
+
+**Fix:**
+1. Find out why rekordbox failed first. If the marker is the only thing wrong, `check` is clean
+   otherwise.
+2. Then move the marker out of `PIONEER\rekordbox` (keep it), and plug the stick in again.
+
+If rekordbox fails again, it writes a fresh marker, and the database needs more work. Never
+answer "Yes" to the prompt on a stick whose histories or deck cues you want: it deletes the
+device library.
 
 ## Playlists on the stick contain other playlists' tracks
 
