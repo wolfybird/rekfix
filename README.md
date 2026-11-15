@@ -1,7 +1,13 @@
 # rekfix
 
-Diagnose, and carefully repair, rekordbox USB exports, without wiping the stick and
-re-exporting.
+The last-ditch rescue for rekordbox USB sticks. Diagnose, repair, or rebuild the library from
+it, before anything gets wiped.
+
+> **Stick acting up, rekordbox offering to "delete the device library", or your library gone?
+> Stop before you click Yes, format the stick or re-export to it.** Each of those destroys what
+> exists only on the stick: the play histories from your gigs, cues set on the decks, and, if
+> rekordbox's library is gone, the library itself. Copy the stick off and run rekfix first
+> ([the checklist](#last-ditch-checklist)).
 
 A re-export rebuilds the stick from your rekordbox library. That is the usual advice when a
 stick misbehaves, but it throws away what exists only on the stick: play histories the decks
@@ -51,6 +57,24 @@ pipx install "git+https://github.com/wolfybird/rekfix"
 4. **If the database is beyond repair,** `rekfix rebuild` gathers everything it can into a
    rekordbox XML file, to import into rekordbox and export a fresh stick from. Do this before
    anything wipes the stick.
+
+## Last-ditch checklist
+
+When a stick fails before a gig, or it's the only copy of your library left:
+
+1. **Stop.** Don't answer "Yes" to rekordbox's "delete the device library", don't format the
+   stick, don't export to it, and don't let a deck write to it. Eject it and set it aside.
+2. **Copy everything off:** `rekfix snapshot E:\ D:\rescue --full` (the databases, analysis
+   files and a list of every file), then the `Contents` folder (the audio). If the stick is
+   failing, copy the most precious things first. Copying is all a dying stick may still allow.
+3. **Find out what's wrong:** `rekfix check E:\` (add `--scan` if it reports damage) and
+   [docs/playbook.md](docs/playbook.md). Often it isn't damage at all: a freezing deck can be a
+   menu setting, a "corrupted" prompt can be a leftover marker.
+4. **Repair in place** when the playbook says that's safe: `menu`, `prune`. Both are dry runs
+   until `--apply`, and both save a copy first.
+5. **Or rebuild** when the database is beyond repair or rekordbox's library is gone:
+   `rekfix rebuild E:\ library.xml --music D:\rescue-audio`. Import it into rekordbox and export
+   a fresh stick, and keep the old stick untouched until the new one has played on your decks.
 
 ## Commands
 
@@ -103,6 +127,10 @@ trouble. have a good set and happy playing. ~rfrank
 
 ## Licence
 
-MIT, see [LICENSE](LICENSE). Thanks to [Deep Symmetry](https://github.com/Deep-Symmetry/crate-digger)
+GPL-3.0-or-later, see [LICENSE](LICENSE). rekfix is free software: you can redistribute it and/or
+modify it under the terms of the GNU General Public License, version 3 or (at your option) any
+later version. It comes with no warranty.
+
+Thanks to [Deep Symmetry](https://github.com/Deep-Symmetry/crate-digger)
 for their documentation of the export format, and to the
 [pyrekordbox](https://github.com/dylanljones/pyrekordbox) project.

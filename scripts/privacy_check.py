@@ -21,10 +21,13 @@ def words():
         return [w.strip() for w in fh if w.strip() and not w.startswith("#")]
 
 
+SKIP = {"LICENSE"}      # the GPL's standard text: nothing personal, and it can't be edited
+
+
 def tracked_and_new():
     r = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard"], cwd=ROOT,
                        capture_output=True, text=True, encoding="utf-8")
-    return [f for f in r.stdout.splitlines() if f]
+    return [f for f in r.stdout.splitlines() if f and f not in SKIP]
 
 
 def main():
