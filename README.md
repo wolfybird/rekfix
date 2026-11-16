@@ -7,7 +7,7 @@ it, before anything gets wiped.
 > Stop before you click Yes, format the stick or re-export to it.** Each of those destroys what
 > exists only on the stick: the play histories from your gigs, cues set on the decks, and, if
 > rekordbox's library is gone, the library itself. Copy the stick off and run rekfix first
-> ([the checklist](#last-ditch-checklist)).
+> ([the checklist](https://github.com/wolfybird/rekfix#last-ditch-checklist)).
 
 A re-export rebuilds the stick from your rekordbox library. That is the usual advice when a
 stick misbehaves, but it throws away what exists only on the stick: play histories the decks
@@ -22,7 +22,7 @@ damaged stick, `rekfix rebuild` gets your library back into rekordbox:
 - your playlists, and the play histories from your gigs.
 
 That's how a 13,000-track library came back after its only copy, a rotting stick, failed
-([the case](docs/cases/2026-07-database-bitrot.md)).
+([the case](https://github.com/wolfybird/rekfix/blob/main/docs/cases/2026-07-database-bitrot.md)).
 
 > rekfix is an independent project. It is not made, endorsed or supported by AlphaTheta or
 > Pioneer DJ; rekordbox, CDJ and XDJ are trademarks of their owners. It reads the stick's
@@ -35,10 +35,12 @@ That's how a 13,000-track library came back after its only copy, a rotting stick
 Python 3.11 or newer, no other packages:
 
 ```
-pipx install "git+https://github.com/wolfybird/rekfix"
+pipx install rekfix
 ```
 
-(or clone it and run `python -m rekfix ...`).
+`pip install rekfix` works too. To run the latest from GitHub:
+`pipx install "git+https://github.com/wolfybird/rekfix"`, or clone it and run
+`python -m rekfix ...`.
 
 ## Start here
 
@@ -52,7 +54,7 @@ pipx install "git+https://github.com/wolfybird/rekfix"
    - tracks whose audio or analysis file isn't on the stick;
    - a root menu that's too heavy for the deck;
    - what an earlier removal of tracks left behind, such as a song count the decks show wrong.
-3. **Look up the symptom** in [docs/playbook.md](docs/playbook.md): what it usually means, how
+3. **Look up the symptom** in [docs/playbook.md](https://github.com/wolfybird/rekfix/blob/main/docs/playbook.md): what it usually means, how
    to confirm it, and what fixes it.
 4. **If the database is beyond repair,** `rekfix rebuild` gathers everything it can into a
    rekordbox XML file, to import into rekordbox and export a fresh stick from. Do this before
@@ -68,7 +70,7 @@ When a stick fails before a gig, or it's the only copy of your library left:
    files and a list of every file), then the `Contents` folder (the audio). If the stick is
    failing, copy the most precious things first. Copying is all a dying stick may still allow.
 3. **Find out what's wrong:** `rekfix check E:\` (add `--scan` if it reports damage) and
-   [docs/playbook.md](docs/playbook.md). Often it isn't damage at all: a freezing deck can be a
+   [docs/playbook.md](https://github.com/wolfybird/rekfix/blob/main/docs/playbook.md). Often it isn't damage at all: a freezing deck can be a
    menu setting, a "corrupted" prompt can be a leftover marker.
 4. **Repair in place** when the playbook says that's safe: `menu`, `prune`. Both are dry runs
    until `--apply`, and both save a copy first.
@@ -110,16 +112,16 @@ and checked against what was written.
 
 ## What it's built from
 
-Four real cases on XDJ-1000MK2 decks, written up in [docs/cases](docs/cases):
+Four real cases on XDJ-1000MK2 decks, written up in [docs/cases](https://github.com/wolfybird/rekfix/blob/main/docs/cases):
 
-- [a stick whose database rotted](docs/cases/2026-07-database-bitrot.md);
-- [playlists merged by an export](docs/cases/2026-10-merged-playlists.md);
-- [a stick that started listing files inconsistently](docs/cases/2026-10-flaky-listing.md);
-- [a healthy stick that froze the decks anyway](docs/cases/2026-11-category-freeze.md): the
+- [a stick whose database rotted](https://github.com/wolfybird/rekfix/blob/main/docs/cases/2026-07-database-bitrot.md);
+- [playlists merged by an export](https://github.com/wolfybird/rekfix/blob/main/docs/cases/2026-10-merged-playlists.md);
+- [a stick that started listing files inconsistently](https://github.com/wolfybird/rekfix/blob/main/docs/cases/2026-10-flaky-listing.md);
+- [a healthy stick that froze the decks anyway](https://github.com/wolfybird/rekfix/blob/main/docs/cases/2026-11-category-freeze.md): the
   library was simply too big for four of the root categories.
 
 The database format notes, including the traps that cost the most time, are in
-[docs/format.md](docs/format.md).
+[docs/format.md](https://github.com/wolfybird/rekfix/blob/main/docs/format.md).
 
 ## Buy us a coffee
 
@@ -132,7 +134,7 @@ trouble. have a good set and happy playing. ~rfrank
 
 ## Licence
 
-GPL-3.0-or-later, see [LICENSE](LICENSE). rekfix is free software: you can redistribute it and/or
+GPL-3.0-or-later, see [LICENSE](https://github.com/wolfybird/rekfix/blob/main/LICENSE). rekfix is free software: you can redistribute it and/or
 modify it under the terms of the GNU General Public License, version 3 or (at your option) any
 later version. It comes with no warranty.
 
