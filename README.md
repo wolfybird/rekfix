@@ -65,7 +65,9 @@ pipx install rekfix
 When a stick fails before a gig, or it's the only copy of your library left:
 
 1. **Stop.** Don't answer "Yes" to rekordbox's "delete the device library", don't format the
-   stick, don't export to it, and don't let a deck write to it. Eject it and set it aside.
+   stick, don't export to it, and don't let a deck write to it. Keep it away from rekordbox
+   until it's copied: rekordbox has been seen writing damage into a stick it then called
+   corrupted. Eject it and set it aside.
 2. **Copy everything off:** `rekfix snapshot E:\ D:\rescue --full` (the databases, analysis
    files and a list of every file), then the `Contents` folder (the audio). If the stick is
    failing, copy the most precious things first. Copying is all a dying stick may still allow.

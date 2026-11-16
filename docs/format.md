@@ -87,7 +87,10 @@ Every page has a 0x28-byte header; rows follow from +28:
 | 1E | u16 | used bytes (the rows' area) |
 
 The 0x10 flag is consistent across rekordbox's own files: on a 2,975-page export, all 283
-pages with deleted rows had it, and no other page did.
+pages with deleted rows had it, and no other page did. Those three values (0x24, 0x34, 0x64)
+are the only ones seen on any page in a chain, in every `export.pdb` and `exportExt.pdb`
+rekordbox wrote; all have 0x24 set. `check` reports a page without those bits as damaged
+(`page.flags`) and skips its row checks, since its counts and sizes are noise.
 
 ### Index pages and spare pages
 
@@ -120,7 +123,14 @@ reproduces rekordbox's own headers exactly. That was tested on a 3,124-page `exp
 every empty candidate pointing at a page in use. Its `exportExt.pdb` carried a header copied from
 an old `export.pdb` (20 tables, pages up to 1,891, in an 18-page file). rekordbox called the
 stick corrupted. With those fixed it got further, then crashed. What else it checks is still
-open.
+open. `check` reports the first two (`index.blank`, `header.empty-in-use`).
+
+**Trap: rekordbox writes to a database it's about to reject.** In that last test, the file was
+clean when rekordbox opened it. A minute later, before it wrote its `brokendb` marker, it had
+rewritten the headers of the tracks and genres pages with values it never writes (flags 0x03,
+row counts in the thousands), written over part of the tracks page's rows, and zeroed the stamps
+on 22 pages. So a stick rekordbox has rejected may be more damaged than it was before rekordbox
+saw it: compare with a copy (`rekfix diff`) before drawing conclusions.
 
 **Trap: the byte at +18 is not the row count.** It's only the low byte of the 13-bit slot
 count. Reading it alone silently loses rows on any page holding more than 255, which happens

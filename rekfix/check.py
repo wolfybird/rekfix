@@ -17,6 +17,12 @@ from .pdb import GROUP, HEADER, LOOKUPS, TABLES, Pdb
 HEAVY_CATEGORIES = {14: "TIME", 15: "BITRATE", 16: "FILE NAME", 18: "HOT CUE BANK"}
 LARGE_LIBRARY = 10_000
 
+# page flags (+0x1B) in every rekordbox-written export.pdb and exportExt.pdb seen: 0x24 on data
+# pages, 0x34 once a row on the page has been deleted, 0x64 on index pages. All have 0x24 set.
+REKORDBOX_FLAGS = {0x24, 0x34, 0x64}
+ALWAYS_SET = 0x24
+ROW_OFFSET_EXAMPLES = 3     # beyond this many bad row offsets on one page, report them as one finding
+
 
 @dataclass
 class Finding:
@@ -40,6 +46,8 @@ def walk(pdb):
         found.append(Finding("error", "header.stale", f"the header says the next free page is {pdb.next_unused}, "
                                                        f"but the file has {pdb.num_pages} pages (tables end as far "
                                                        f"as page {highest}): the header doesn't describe this file"))
+    owner = {}                  # page -> the table whose chain uses it
+    blank_index = []
     for typ, table in pdb.tables.items():
         name = table.name
         index, seen, pages, rows, variants = table.first, [], 0, 0, []
@@ -52,6 +60,7 @@ def walk(pdb):
                 found.append(Finding("error", "chain.loop", f"{name}: page chain loops back to page {index}"))
                 break
             seen.append(index)
+            owner.setdefault(index, name)
             page = pdb.page(index)
             pages += 1
             if page.index != index:
@@ -59,7 +68,18 @@ def walk(pdb):
             if page.type != typ:
                 found.append(Finding("error", "page.type", f"{name}: page {index} belongs to table {page.type} "
                                                             f"({TABLES.get(page.type, '?')})"))
-            if page.is_data:
+            if page.flags & ALWAYS_SET != ALWAYS_SET:
+                # not a header rekordbox writes: its counts and sizes are noise, so skip the row checks
+                found.append(Finding("error", "page.flags", f"{name}: page {index}'s header is damaged (flags "
+                                                             f"{page.flags:#04x}; rekordbox writes 0x24 or 0x34 on "
+                                                             f"data pages, 0x64 on index pages), so its rows can't "
+                                                             f"be trusted"))
+            elif page.flags not in REKORDBOX_FLAGS:
+                found.append(Finding("warn", "page.flags", f"{name}: page {index} has flags {page.flags:#04x}, a "
+                                                            f"value not seen in rekordbox's exports (0x24, 0x34, 0x64)"))
+            elif not page.is_data and index == table.first and pdb.u32(page.pos + 0x28) != index:
+                blank_index.append(f"{name} (page {index})")
+            if page.is_data and page.flags & ALWAYS_SET == ALWAYS_SET:
                 rows += _check_page(pdb, page, name, found, variants)
             if index == table.last:
                 break
@@ -86,6 +106,19 @@ def walk(pdb):
                                                              f"{', '.join(map(str, variants[:5]))}...); deleted rows, "
                                                              f"or the older-export word order - see docs/format.md"))
         out[typ] = (pages, rows)
+    # where each table's next page would go: rekordbox keeps it on a blank page or past the end
+    taken = [f"{t.name} -> page {t.empty_candidate} ({owner[t.empty_candidate]})" for t in pdb.tables.values()
+             if t.empty_candidate in owner]
+    if taken:
+        found.append(Finding("error", "header.empty-in-use", f"{len(taken)} tables' empty candidate, the page kept "
+                                                              f"for the table's next page, is a page in use: "
+                                                              f"{', '.join(taken[:4])}{', ...' if len(taken) > 4 else ''}. "
+                                                              f"rekordbox keeps it on a blank page or past the end of "
+                                                              f"the file; adding a page there would overwrite live rows"))
+    if blank_index:
+        found.append(Finding("warn", "index.blank", f"{len(blank_index)} tables' index pages are empty, not in the "
+                                                     f"layout rekordbox writes (e.g. {', '.join(blank_index[:3])}): "
+                                                     f"the file was written by another tool"))
     return out, found
 
 
@@ -100,6 +133,11 @@ def footer_slots(pdb, page):
 def _check_page(pdb, page, name, found, variants):
     space = pdb.page_size - HEADER
     groups = (page.slots + 15) // 16
+    if groups * GROUP > space:
+        # more row slots than a page can index: the count is garbage, and so would every row be
+        found.append(Finding("error", "page.space", f"{name}: page {page.index} says it has {page.slots:,} row "
+                                                     f"slots, more than a page can hold"))
+        return 0
     if page.free + page.used + groups * GROUP > space + GROUP:
         found.append(Finding("error", "page.space", f"{name}: page {page.index} free {page.free} + used "
                                                      f"{page.used} + index doesn't fit the page"))
@@ -108,12 +146,20 @@ def _check_page(pdb, page, name, found, variants):
         found.append(Finding("warn", "page.footer", f"{name}: page {page.index} header says {page.slots} row slots, "
                                                      f"free/used sizes imply {implied}"))
     present = 0
+    outside = []
     for slot in range(page.slots):
         if not pdb.is_present(page, slot):
             continue
         present += 1
         off = pdb.row_offset(page, slot)
         if off >= page.used:
+            outside.append((slot, off))
+    if len(outside) > ROW_OFFSET_EXAMPLES:
+        slot, off = outside[0]
+        found.append(Finding("error", "row.offset", f"{name}: page {page.index}: {len(outside):,} rows start outside "
+                                                     f"the page's {page.used} used bytes (e.g. row {slot} at {off})"))
+    else:
+        for slot, off in outside:
             found.append(Finding("error", "row.offset", f"{name}: page {page.index} row {slot} starts at {off}, "
                                                          f"outside the page's {page.used} used bytes"))
     if present != page.present:
