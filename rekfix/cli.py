@@ -13,8 +13,10 @@
   rekfix snapshot E:\\ D:\\backups   copy the databases + list every file, before anything else
   rekfix readtest E:\\              how fast and evenly the stick reads
 
-Commands that write (menu and prune, with --apply) save a copy of the database first, refuse
-while rekordbox is running, and only edit fixed-size fields in place.
+Only menu, prune and clone change a stick, and only with --apply (without it, each shows what
+it would do). None of them runs while rekordbox is running. menu and prune save a copy of the
+database first and only edit fixed-size fields in place; clone writes only to the target stick,
+never to the source, and reads every file back.
 """
 import argparse
 import datetime as dt

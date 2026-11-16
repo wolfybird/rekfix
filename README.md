@@ -92,14 +92,15 @@ When a stick fails before a gig, or it's the only copy of your library left:
 | `snapshot STICK DEST [--full]` | databases + file list, before you change anything |
 | `readtest STICK` | how fast and evenly the stick reads (Windows: bypassing the cache) |
 
-Only `menu --apply` and `prune --apply` write.
+Only three commands change a stick, and only with `--apply` (without it, each shows what it
+would do): `menu` and `prune` edit the stick's database, and `clone` writes to another stick.
+None of them runs while rekordbox is running.
 
-**Before writing,** they:
-- refuse if rekordbox is running;
+**Before editing,** `menu` and `prune`:
 - refuse to edit a database `check` finds damaged;
 - save a copy of `export.pdb`.
 
-**When writing,** they edit fixed-size fields in place, with the same bookkeeping rekordbox
+**When editing,** they change fixed-size fields in place, with the same bookkeeping rekordbox
 does: page counts and flags, and a new sequence number.
 
 **After editing,** `prune` re-reads the result from scratch before saving. It checks that the
