@@ -11,6 +11,7 @@
   rekfix clone E:\\ F:\\ --audio-from D:\\Music --apply      an exact copy, read back file by file
   rekfix history E:\\               play histories the decks saved
   rekfix snapshot E:\\ D:\\backups   copy the databases + list every file, before anything else
+  rekfix snapshot E:\\ D:\\backups --full --audio   ... and the analysis files and the audio
   rekfix readtest E:\\              how fast and evenly the stick reads
 
 Only menu, prune and clone change a stick, and only with --apply (without it, each shows what
@@ -276,7 +277,7 @@ def cmd_history(a):
 
 
 def cmd_snapshot(a):
-    snapshot.take(a.stick, a.dest, a.label, a.full)
+    snapshot.take(a.stick, a.dest, a.label, a.full, a.audio)
     return 0
 
 
@@ -369,6 +370,8 @@ def main(argv=None):
     p.add_argument("dest", help="folder to put the snapshot in")
     p.add_argument("--label", help="snapshot folder name (default: date and time)")
     p.add_argument("--full", action="store_true", help="copy the whole PIONEER folder (analysis files too)")
+    p.add_argument("--audio", action="store_true", help="copy the Contents folder (the audio) too, without the "
+                                                        "mix-ups Windows can make with look-alike folder names")
     p.set_defaults(fn=cmd_snapshot)
 
     p = sub.add_parser("readtest", help="read speed and slow spots of the stick")

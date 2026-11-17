@@ -1,4 +1,4 @@
-# October 2026: cloning a stick without rekordbox, and a stick that listed files inconsistently
+# October 2026: cloning a stick without rekordbox, and a stick that seemed to list files inconsistently
 
 **Goal:** a second stick, an exact copy of the main one, to keep on a keychain.
 
@@ -32,6 +32,19 @@ up in the first two listings and in none of the other four, with nothing writing
 (see the [July case](2026-07-database-bitrot.md)). The plan was to read back every file after
 building the copy, and to replace the stick at the first sign of trouble.
 
+**Update, November: it wasn't the stick.** The two MP3s sat in an artist folder whose name
+differed from its neighbour's by one letter: a Polish ł in one, a plain l in the other
+("Michał" and "Michal" style). Windows' FAT driver reads both names the same way, and which
+folder a path reaches depends on which one Windows has open. Through the folders' 8.3 short
+names, both were intact all along, and a read test of the stick a month later was as good as the
+main stick's.
+
+It had cost more than a wrong verdict. The stick's backup, made on Windows, had gone through
+the same mix-up: one folder's files were in it twice, and the two MP3s not at all. They were in
+no other copy either. That's why planning the clone below found "two weren't in the folders
+given". rekfix now reaches folders through their short names and reports such names
+(`files.lookalike`), and `snapshot --audio` copies the audio the same way.
+
 ## `rekfix clone` now does this
 
 In November the approach became a command:
@@ -54,5 +67,8 @@ no mismatches. Planning a refresh right after found nothing to copy.
 
 - **A clone beats an export** when the stick holds anything rekordbox doesn't.
 - **Keep the snapshot's file list** (path, size, date). It says what each file on the stick is,
-  and where its source lives.
-- **Unstable directory listings** are a hardware warning, even when every check passes.
+  and where its source lives. Check backups against it: a hand copy on Windows silently missed
+  two tracks.
+- **Unstable directory listings** are a hardware warning, even when every check passes, but rule
+  out Windows first: if it's always the same few files, next to a folder whose name differs by
+  one letter, it's the name mix-up (`rekfix check` reports `files.lookalike`).

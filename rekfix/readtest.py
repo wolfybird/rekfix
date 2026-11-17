@@ -8,6 +8,8 @@ import statistics
 import sys
 import time
 
+from . import names
+
 if sys.platform == "win32":
     import ctypes
     import ctypes.wintypes as wt
@@ -107,32 +109,34 @@ def run(root, n_audio=60, n_anlz=1500, seed=1, progress=print):
     pdb = os.path.join(root, "PIONEER", "rekordbox", "export.pdb")
     if os.path.exists(pdb):
         progress(_line("export.pdb, 64 KB reads", _read(pdb, 65536)))
-    audio, errors, slow = [], [], []
-    for dirpath, _, files in os.walk(os.path.join(root, "Contents")):
-        audio += [os.path.join(dirpath, f) for f in files if f.lower().endswith(AUDIO)]
+    errors, slow, groups = [], [], []
+    # files are reached through rekfix's own listings (short names on Windows): a look-alike
+    # folder name can't send a read into the wrong folder
+    contents = os.path.join(root, "Contents")
+    audio = sorted((os.path.join("Contents", rel), e.path)
+                   for rel, e in names.walk(contents, groups=groups) if rel.lower().endswith(AUDIO))
     rows = []
-    for f in rng.sample(audio, min(n_audio, len(audio))):
+    for rel, f in rng.sample(audio, min(n_audio, len(audio))):
         try:
             r = _read(f, 1 << 20)
         except OSError as e:
-            errors.append(f"{os.path.relpath(f, root)}: {e}")
+            errors.append(f"{rel}: {e}")
             continue
         rows += r
         worst = max((t for t, _ in r), default=0)
         if worst > 0.25:
-            slow.append((worst, os.path.relpath(f, root)))
+            slow.append((worst, rel))
     if rows:
         progress(_line(f"{min(n_audio, len(audio))} music files, 1 MB reads", rows))
-    anlz = []
-    for dirpath, _, files in os.walk(os.path.join(root, "PIONEER", "USBANLZ")):
-        anlz += [os.path.join(dirpath, f) for f in files]
+    anlz = sorted((os.path.join("PIONEER", "USBANLZ", rel), e.path)
+                  for rel, e in names.walk(os.path.join(root, "PIONEER", "USBANLZ")))
     lat = []
-    for f in rng.sample(anlz, min(n_anlz, len(anlz))):
+    for rel, f in rng.sample(anlz, min(n_anlz, len(anlz))):
         t = time.perf_counter()
         try:
             _read(f, 1 << 20)
         except OSError as e:
-            errors.append(f"{os.path.relpath(f, root)}: {e}")
+            errors.append(f"{rel}: {e}")
             continue
         lat.append(time.perf_counter() - t)
     if lat:
@@ -141,6 +145,10 @@ def run(root, n_audio=60, n_anlz=1500, seed=1, progress=print):
     progress(f"read errors: {len(errors)}" + "".join(f"\n  {e}" for e in errors[:10]))
     for worst, f in sorted(slow, reverse=True)[:10]:
         progress(f"  slow read {worst * 1000:.0f} ms: {f}")
+    if groups:
+        groups = [(os.path.join("Contents", folder) if folder else "Contents", g) for folder, g in groups]
+        progress(f"note: names Windows can mix up: {names.describe(groups)}. Windows programs can open one for the "
+                 f"other, so files there can seem to come and go; this test reads them correctly. See `rekfix check`")
     if sys.platform != "win32":
         progress("(not Windows: the system cache may have served some reads - eject and re-insert for real numbers)")
     return not errors

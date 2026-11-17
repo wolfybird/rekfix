@@ -70,25 +70,26 @@ Flash wear ("bit rot") on an old, hot-running stick is a common cause.
 - `tracks.duplicate-id`: the same track id on several rows.
 
 **Fix:**
-1. Copy the stick off first: `rekfix snapshot E:\ D:\backup --full`.
+1. Copy the stick off first, audio included:
+   `rekfix snapshot E:\ D:\backup --full --audio --label stick`.
 2. **Recover what's in the database:** `rekfix check E:\ --scan --tables` and
    `rekfix history E:\ --scan --tracks` read it page by page, ignoring the damaged header and
    chains.
 3. **Rebuild the library in rekordbox from that,** then export a fresh stick:
-   `rekfix rebuild E:\ library.xml --scan --music D:\stick-copy`. It gathers into one rekordbox
+   `rekfix rebuild E:\ library.xml --scan --music D:\backup\stick`. It gathers into one rekordbox
    XML file:
    - every track's metadata, key and BPM;
    - the beat grids, hot cues, memory cues and loops from the analysis files (including ones
      set on the decks);
    - the playlists, and the decks' play histories as playlists.
 
-   Copy the stick's `Contents` folder to the computer first and point `--music` at the copy, so
-   the new library doesn't depend on the old stick. Then import the XML in rekordbox
-   (Preferences > Advanced > Database > rekordbox xml).
+   Pointing `--music` at the snapshot's copy of the audio keeps the new library independent of
+   the old stick. Then import the XML in rekordbox (Preferences > Advanced > Database >
+   rekordbox xml).
 
    Patching the binary file by hand didn't work: the players showed 0 songs every time. See the
    case.
-4. **Replace the stick** if it also shows the "flaky stick" signs below.
+4. **Replace the stick** if it also shows the "failing stick" signs below.
 
 Case: [2026-07-database-bitrot](cases/2026-07-database-bitrot.md).
 
@@ -99,10 +100,11 @@ the only copy of your library. Don't export anything to that stick, and don't le
 "fix" or delete its library.
 
 **Fix:**
-1. **Copy the stick off first:** `rekfix snapshot E:\ D:\backup --full`, plus its `Contents`
-   folder (the audio) to the computer, e.g. `D:\stick-copy\Contents`.
+1. **Copy the stick off first:** `rekfix snapshot E:\ D:\backup --full --audio --label stick`
+   copies the databases, the analysis files and the audio to `D:\backup\stick`. Use it rather
+   than Explorer, which can miss files on Windows (see "The same few files come and go").
 2. **Check it:** `rekfix check E:\`. If it reports damage, add `--scan` to the next step.
-3. **Rebuild:** `rekfix rebuild E:\ D:\library.xml --music D:\stick-copy --all-audio`. Read the
+3. **Rebuild:** `rekfix rebuild E:\ D:\library.xml --music D:\backup\stick --all-audio`. Read the
    summary and the `.report.txt` next to the XML: what was found, what's missing, which matches
    to look at.
 4. **Import** into rekordbox: Preferences > Advanced > Database > rekordbox xml, choose the file,
@@ -208,10 +210,41 @@ there too.
 the pages the earlier edit changed, as rekordbox would have. Check the dry run first; it lists
 everything it will change.
 
+## The same few files come and go, in folders whose names differ by one letter (Windows)
+
+**What you see:**
+- On Windows, a folder lists different files on different tries, always in the same place.
+- A file that's listed can't be opened ("cannot find the file", or `[Errno 2]` from
+  `rekfix readtest`).
+- Next to that folder is another whose name differs only in an accented or special letter:
+  `Michał Nowak` and `Michal Nowak`, `Røyksopp` and `Royksopp`.
+- A copy or backup of the stick has one folder's files twice and the other's not at all.
+
+**Usually means:** Windows, not the stick. Its FAT driver compares names through an old code
+page that lacks letters like ł, ø or Á and reads them as l, o and A, so the two folders look
+the same to it. Which one a path reaches then depends on which Windows has open. Through each
+folder's 8.3 short name (`MICHAL~2`) the right one is always there, and the files are fine.
+
+**Confirm:** `rekfix check E:\` reports `files.lookalike` and names the folders. `rekfix
+readtest` and `rekfix snapshot` note them too.
+
+**Fix:**
+- **Copy with rekfix, not Explorer:** `rekfix snapshot E:\ D:\backup --full --audio` reaches every
+  folder through its short name, and its file list has both folders right. A backup made by
+  hand on Windows may be missing files from one of them: compare it with that list.
+- `check`, `prune`, `readtest`, `snapshot` and `rebuild` look the folders up themselves, so the
+  mix-up can't make a track look missing or send a read into the wrong folder.
+- `clone` refuses such a stick on Windows: writing both names, Windows could put one's files in
+  the other. Clone it from a Mac or Linux.
+- To be rid of it, give the tracks in one of the folders the other's spelling of the artist, and
+  export again.
+
+Case: [2026-10-flaky-listing](cases/2026-10-flaky-listing.md), first read as a failing stick.
+
 ## Files come and go, copies fail, the stick drops off
 
 **What you see:**
-- The same folder lists different files on different tries.
+- Files come and go anywhere on the stick, not just next to a look-alike folder (see above).
 - Copies fail with "insufficient system resources" (ERROR 1450).
 - The drive vanishes mid-copy.
 - `chkdsk` finds nothing wrong.
@@ -220,7 +253,7 @@ everything it will change.
 run hot.
 
 **Fix:**
-- Copy what you can now: `rekfix snapshot E:\ D:\backup --full`, then the music.
+- Copy what you can now: `rekfix snapshot E:\ D:\backup --full --audio`, most precious first.
 - Stop writing to it, and replace it.
 - Rebuild the new stick from the snapshot plus your library's copies of the audio, with no
   rekordbox export:
@@ -229,7 +262,7 @@ run hot.
   - Deck histories and cues are kept.
   - Every file is read back from the new stick.
 
-  See [2026-10-flaky-listing](cases/2026-10-flaky-listing.md).
+  See [2026-07-database-bitrot](cases/2026-07-database-bitrot.md).
 - `rekfix readtest E:\` shows how the stick reads. A healthy one reads its database at well over
   50 MB/s with no read slower than a few milliseconds.
 

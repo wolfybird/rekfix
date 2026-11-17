@@ -46,12 +46,13 @@ pipx install rekfix
 
 1. **Copy before anything else.** `rekfix snapshot E:\ D:\stick-backups` copies the stick's
    databases (checksum-verified) and writes a list of every file on it. Add `--full` to copy
-   the analysis files too. Nothing on the stick changes.
+   the analysis files too, and `--audio` for the music. Nothing on the stick changes.
 2. **Check it.** `rekfix check E:\` reads `export.pdb`, the database older players read, and
    reports anything a deck could trip over. It checks:
    - the database's structure;
    - playlists and play histories that point at missing tracks;
    - tracks whose audio or analysis file isn't on the stick;
+   - folder names Windows can mix up, which make files seem to come and go;
    - a root menu that's too heavy for the deck;
    - what an earlier removal of tracks left behind, such as a song count the decks show wrong.
 3. **Look up the symptom** in [docs/playbook.md](https://github.com/wolfybird/rekfix/blob/main/docs/playbook.md): what it usually means, how
@@ -68,8 +69,10 @@ When a stick fails before a gig, or it's the only copy of your library left:
    stick, don't export to it, and don't let a deck write to it. Keep it away from rekordbox
    until it's copied: rekordbox has been seen writing damage into a stick it then called
    corrupted. Eject it and set it aside.
-2. **Copy everything off:** `rekfix snapshot E:\ D:\rescue --full` (the databases, analysis
-   files and a list of every file), then the `Contents` folder (the audio). If the stick is
+2. **Copy everything off:** `rekfix snapshot E:\ D:\rescue --full --audio --label stick` (the
+   databases, analysis files and audio, and a list of every file, in `D:\rescue\stick`). Prefer
+   it to Explorer: on Windows, two folders whose names differ by one letter (`Michał`,
+   `Michal`) can get mixed up, and a hand copy then silently misses files. If the stick is
    failing, copy the most precious things first. Copying is all a dying stick may still allow.
 3. **Find out what's wrong:** `rekfix check E:\` (add `--scan` if it reports damage) and
    [docs/playbook.md](https://github.com/wolfybird/rekfix/blob/main/docs/playbook.md). Often it isn't damage at all: a freezing deck can be a
@@ -77,7 +80,7 @@ When a stick fails before a gig, or it's the only copy of your library left:
 4. **Repair in place** when the playbook says that's safe: `menu`, `prune`. Both are dry runs
    until `--apply`, and both save a copy first.
 5. **Or rebuild** when the database is beyond repair or rekordbox's library is gone:
-   `rekfix rebuild E:\ library.xml --music D:\rescue-audio`. Import it into rekordbox and export
+   `rekfix rebuild E:\ library.xml --music D:\rescue\stick`. Import it into rekordbox and export
    a fresh stick, and keep the old stick untouched until the new one has played on your decks.
 
 ## Commands
@@ -91,7 +94,7 @@ When a stick fails before a gig, or it's the only copy of your library left:
 | `rebuild STICK OUT.xml [--music DIR] [--scan] [--all-audio]` | recover the library, even from a damaged stick, as rekordbox XML: metadata, key, BPM, beat grids, hot and memory cues, loops, playlists, play histories |
 | `clone SOURCE TARGET [--audio-from DIR] [--apply]` | an exact copy of a stick on another, without rekordbox: keeps deck histories and deck cues, reads every file back, refreshes by copying only what changed |
 | `history STICK [--tracks] [--scan]` | the play histories the decks saved on the stick |
-| `snapshot STICK DEST [--full]` | databases + file list, before you change anything |
+| `snapshot STICK DEST [--full] [--audio]` | databases + file list, before you change anything; `--full` adds the analysis files, `--audio` the music |
 | `readtest STICK` | how fast and evenly the stick reads (Windows: bypassing the cache) |
 
 Only three commands change a stick, and only with `--apply` (without it, each shows what it
@@ -119,7 +122,8 @@ Four real cases on XDJ-1000MK2 decks, written up in [docs/cases](https://github.
 
 - [a stick whose database rotted](https://github.com/wolfybird/rekfix/blob/main/docs/cases/2026-07-database-bitrot.md);
 - [playlists merged by an export](https://github.com/wolfybird/rekfix/blob/main/docs/cases/2026-10-merged-playlists.md);
-- [a stick that started listing files inconsistently](https://github.com/wolfybird/rekfix/blob/main/docs/cases/2026-10-flaky-listing.md);
+- [a stick that seemed to list files inconsistently](https://github.com/wolfybird/rekfix/blob/main/docs/cases/2026-10-flaky-listing.md):
+  it was Windows mixing up two folder names, and a backup had silently lost two tracks to it;
 - [a healthy stick that froze the decks anyway](https://github.com/wolfybird/rekfix/blob/main/docs/cases/2026-11-category-freeze.md): the
   library was simply too big for four of the root categories.
 

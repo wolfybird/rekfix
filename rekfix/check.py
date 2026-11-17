@@ -10,6 +10,7 @@ import struct
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 
+from . import names
 from .pdb import GROUP, HEADER, LOOKUPS, TABLES, Pdb
 
 # the root categories a player builds by scanning every track when you land on them; on a large
@@ -292,10 +293,13 @@ def files(pdb, root, by_id=None):
                                                                 "reading it, and will say 'device library is corrupted' "
                                                                 "while the marker is there. See docs/playbook.md"))
     by_id = by_id if by_id is not None else pdb.tracks()
+    # audio is looked up folder by folder (names.py: a look-alike folder must not hide a file or
+    # stand in for one); analysis folders are named by rekordbox in hex, so the quick way is safe
+    stick = names.Resolver(root)
     missing_audio, missing_anlz = [], []
     for ts in by_id.values():
         t = ts[0]
-        if t.path and not os.path.exists(on_stick(root, t.path)):
+        if t.path and not stick.find(t.path):
             missing_audio.append(t)
         anlz = t.strings.get("analyze_path")
         if anlz and not os.path.exists(on_stick(root, anlz)):
@@ -307,6 +311,13 @@ def files(pdb, root, by_id=None):
     if missing_anlz:
         found.append(Finding("warn", "files.analysis", f"{len(missing_anlz):,} tracks' analysis files aren't on the "
                                                         f"stick, e.g. {missing_anlz[0].strings['analyze_path']}"))
+    groups = stick.lookalikes()
+    if groups:
+        found.append(Finding("warn", "files.lookalike", f"{len(groups)} sets of names on the stick differ only in a "
+                                                        f"letter Windows reads as another: {names.describe(groups)}. "
+                                                        f"On Windows, rekordbox, Explorer and backup tools can open "
+                                                        f"one for the other, so copies can miss files. rekfix reads "
+                                                        f"them correctly. See docs/playbook.md"))
     return found
 
 
