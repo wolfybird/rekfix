@@ -9,7 +9,9 @@ Before trying any fix:
    only if you have a copy.
 2. **Close rekordbox.** It writes to a stick as soon as it sees it: it bumps the database's
    sequence number and keeps a working file next to `exportLibrary.db`. Don't let it run
-   while you test or edit.
+   while you test or edit. On a stick it went on to call corrupted, it first wrote damage into
+   the database itself (see the next section), so take the snapshot before rekordbox sees the
+   stick again.
 3. **Eject properly** before pulling the stick. An unplug mid-write is a classic way to
    corrupt a database.
 4. **Change one thing per deck test.** A stick that misbehaves on the decks has to be tested on
@@ -60,6 +62,10 @@ Flash wear ("bit rot") on an old, hot-running stick is a common cause.
 **Confirm:** `rekfix check E:\`. These are the patterns seen so far:
 - `header.stale`: the header describes a different, smaller database than the file holds.
 - `pages.unreached`: rows the table's page chain never reaches.
+- `page.flags`: a page header rekordbox never writes. rekordbox itself left two of these on a
+  test stick, while failing to read it.
+- `header.empty-in-use`: the page a table keeps for its next page is one already in use.
+- `index.blank`: index pages that are empty (another tool wrote the file).
 - `tracks.strings`: track text that can't be read.
 - `tracks.duplicate-id`: the same track id on several rows.
 
@@ -130,11 +136,16 @@ on it. While the marker was there, rekordbox kept reporting the library as corru
 without reading it again: fixes made after the marker appeared changed nothing until it was moved
 aside. Not every "corrupted" prompt leaves a marker; earlier prompts on the same stick hadn't.
 
+The first time, rekordbox also damaged the database it was reading: in the minute before the
+marker appeared, it rewrote two data pages' headers with values it never writes. The database
+had been clean when it started.
+
 **Confirm:** `rekfix check E:\` reports `rekordbox.broken-marker`.
 
 **Fix:**
 1. Find out why rekordbox failed first. If the marker is the only thing wrong, `check` is clean
-   otherwise.
+   otherwise. If `check` finds damage, compare with a snapshot from before rekordbox last saw
+   the stick (`rekfix diff`): rekordbox may have written it.
 2. Then move the marker out of `PIONEER\rekordbox` (keep it), and plug the stick in again.
 
 If rekordbox fails again, it writes a fresh marker, and the database needs more work. Never

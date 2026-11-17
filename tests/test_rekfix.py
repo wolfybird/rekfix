@@ -104,6 +104,62 @@ class Damage(unittest.TestCase):
         struct.pack_into("<I", data, 0x1C + 12, 9999)                        # last page never reached
         self.assertIn("chain.loop", codes(check.walk(Pdb(bytes(data)))[1], "error"))
 
+    def test_a_page_header_rekordbox_never_writes(self):
+        # what rekordbox itself left on a test stick before calling it corrupted: ~1,990 rows, flags 0x03
+        data = bytearray(synth.build(tracks=6))
+        first = struct.unpack_from("<I", data, 0x1C + 8)[0]
+        pos = first * synth.PS
+        data[pos + 0x18:pos + 0x1C] = bytes([0x00, 0xD4, 0xF8, 0x03])
+        found = check.walk(Pdb(bytes(data)))[1]
+        self.assertIn("page.flags", codes(found, "error"))
+        self.assertFalse({"row.offset", "page.space", "page.count"} & codes(found))   # one finding, not one per slot
+        data = bytearray(synth.build(tracks=6))
+        data[pos + 0x1B] = 0x2C                                               # rekordbox's bits, unfamiliar value
+        self.assertIn("page.flags", codes(check.walk(Pdb(bytes(data)))[1], "warn"))
+
+    def test_impossible_row_count_is_one_finding(self):
+        data = bytearray(synth.build(tracks=6))
+        pos = struct.unpack_from("<I", data, 0x1C + 8)[0] * synth.PS
+        data[pos + 0x18:pos + 0x1B] = (5000 | 3 << 13).to_bytes(3, "little")   # 5,000 slots can't fit a page
+        found = [f for f in check.walk(Pdb(bytes(data)))[1] if f.level == "error"]
+        self.assertEqual([f.code for f in found], ["page.space"])
+
+    def test_empty_candidate_in_use(self):
+        data = bytearray(synth.build())
+        first = struct.unpack_from("<I", data, 0x1C + 8)[0]
+        struct.pack_into("<I", data, 0x1C + 4, first)                         # tracks' spare page: its own first
+        self.assertIn("header.empty-in-use", codes(check.walk(Pdb(bytes(data)))[1], "error"))
+
+    def test_blank_index_page(self):
+        for filled in (False, True):
+            data = bytearray(synth.build())
+            n = len(data) // synth.PS
+            keys = 0x1C + 16 * 5
+            index = bytearray(synth.PS)
+            struct.pack_into("<4I", index, 0, 0, n, 5, struct.unpack_from("<I", data, keys + 8)[0])
+            index[0x1B] = 0x64
+            if filled:
+                struct.pack_into("<HHI", index, 0x24, 0x3EC, 0, n)            # rekordbox's layout names its own page
+            data += index
+            struct.pack_into("<I", data, keys + 8, n)                         # keys now start at their index page
+            for t in range(20):
+                struct.pack_into("<I", data, 0x1C + 16 * t + 4, n + 1)        # spare pages past the end
+            struct.pack_into("<I", data, 0x0C, n + 2)
+            found = check.walk(Pdb(bytes(data)))[1]
+            self.assertEqual("index.blank" in codes(found, "warn"), not filled)
+            self.assertFalse(codes(found, "error"), [str(f) for f in found])
+
+    def test_many_bad_row_offsets_are_one_finding(self):
+        data = bytearray(synth.build(entries_per_list={1: [1, 2, 3] * 10}))
+        pos = struct.unpack_from("<I", data, 0x1C + 16 * 8 + 8)[0] * synth.PS
+        used = struct.unpack_from("<H", data, pos + 0x1E)[0]
+        for slot in range(30):
+            g, s = divmod(slot, 16)
+            struct.pack_into("<H", data, pos + synth.PS - g * 0x24 - 6 - 2 * s, used + 4)
+        found = [f for f in check.walk(Pdb(bytes(data)))[1] if f.code == "row.offset"]
+        self.assertEqual(len(found), 1)
+        self.assertIn("30 rows", found[0].message)
+
     def test_stale_header_and_recovery_scan(self):
         data = bytearray(synth.build(tracks=6))
         first, last = struct.unpack_from("<2I", data, 0x1C + 8)
