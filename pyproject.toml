@@ -1,6 +1,6 @@
 [project]
 name = "rekfix"
-version = "0.2.0"
+version = "0.2.1"
 description = "The last-ditch rescue for rekordbox USB sticks: diagnose, repair, rebuild or clone, before anything gets wiped"
 readme = "README.md"
 license = "GPL-3.0-or-later"
