@@ -28,7 +28,7 @@ import shutil
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from . import check
+from . import check, names
 from .pdb import GROUP, Pdb
 
 TOO_MANY = 0.5      # more than this share of tracks without audio: probably the wrong folder
@@ -134,10 +134,11 @@ def plan(pdb, root, restore_from=(), restore_all=False, force=False):
     p = Plan(tracks=len(tracks))
     played = {tid for _, _, tid, _ in pdb.history_entries()}
     gone = []
+    stick = names.Resolver(root)        # exact look-ups: a look-alike folder must not hide a live track
     for t in tracks.values():
         if not t.path or any(e.startswith("file_path") for e in t.string_errors):
             p.unreadable.append(t)
-        elif not os.path.exists(check.on_stick(root, t.path)):
+        elif not stick.find(t.path):
             gone.append(t)
     p.missing = len(gone)
     if gone and len(gone) > TOO_MANY * len(tracks) and not force:
@@ -270,17 +271,24 @@ def verify(before, new_data, p, changed):
 
 
 def restore_files(p, root):
-    """Copy the planned tracks' audio back onto the stick, each checked for size. Returns them."""
+    """Copy the planned tracks' audio back onto the stick, each checked for size and found again
+    where the database expects it. Returns them."""
     done = []
+    stick = names.Resolver(root)
     for t, src in p.restore:
-        dst = check.on_stick(root, t.path)
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        try:
+            dst = stick.place(t.path)
+        except ValueError as e:
+            raise PruneError(f"can't copy {t.path} back safely: {e}; stopped (export.pdb not written)")
         tmp = dst + ".rekfix-tmp"
         shutil.copy2(src, tmp)
         if os.path.getsize(tmp) != t.file_size:
             os.remove(tmp)
             raise PruneError(f"the copy of {src} came out the wrong size; stopped (export.pdb not written)")
         os.replace(tmp, dst)
+        back = names.Resolver(root).find(t.path)
+        if back is None or back.size != t.file_size:
+            raise PruneError(f"copied {t.path} back, but it isn't there now; stopped (export.pdb not written)")
         done.append(dst)
     return done
 

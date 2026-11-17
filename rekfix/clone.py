@@ -15,8 +15,10 @@ histories, cues set on the decks, hand repairs. A clone copies every file instea
   holds no database pointing at files that aren't there;
 - each file under a temporary name, then renamed, with its date kept;
 - each file read back from the target, bypassing the system cache, and checksummed against what
-  was written. A clean chkdsk doesn't vouch for a stick (the flaky-listing case), so a mismatch is
-  retried once, then stops the clone;
+  was written. A clean chkdsk doesn't vouch for a stick (the July case), so a mismatch is retried
+  once, then stops the clone;
+- the source is walked through rekfix's own listings (short names on Windows), and a source with
+  names Windows can't keep apart is refused on Windows (see names.py);
 - a marker file (rekfix-clone.json) at the target's root is written last. Its presence means the
   clone completed, and it lets a later run refresh the clone by copying only what changed.
 
@@ -34,7 +36,7 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from . import __version__
+from . import __version__, names
 from .readtest import read_uncached
 
 SYSTEM = {"system volume information", "$recycle.bin", ".spotlight-v100", ".fseventsd", ".trashes",
@@ -78,20 +80,12 @@ def _top(rel):
 
 
 def _walk(root, skip):
-    for dirpath, dirnames, filenames in os.walk(root):
-        if os.path.normcase(dirpath) == os.path.normcase(root):
-            dirnames[:] = [d for d in dirnames if d.lower() not in SYSTEM and d.lower() not in skip]
-        for f in filenames:
-            p = os.path.join(dirpath, f)
-            rel = os.path.relpath(p, root)
-            if rel == MARKER or f.endswith(".rekfix-tmp"):
-                continue
-            try:
-                st = os.stat(p)
-            except OSError:
-                yield rel, -1, 0.0, None
-                continue
-            yield rel, st.st_size, st.st_mtime, p
+    """(path on the stick, size, date, path to read it at) for every file; folders are listed by
+    rekfix and entered through short names on Windows (see names.py)."""
+    for rel, e in names.walk(root, skip=SYSTEM | set(skip)):
+        if rel == MARKER or rel.endswith(".rekfix-tmp"):
+            continue
+        yield rel, e.size, e.mtime, e.path
 
 
 def is_snapshot(path):
@@ -130,7 +124,7 @@ class Library:
         for root in roots:
             for rel, size, mtime, p in _walk(root, set()):
                 self.by_rel.setdefault(rel.replace("\\", "/").lower(), (p, size))
-                self.by_name[os.path.basename(p).lower()].append((p, size, mtime))
+                self.by_name[os.path.basename(rel).lower()].append((p, size, mtime))   # p may use short names
 
     def find(self, rel, size, mtime):
         key = rel.replace("\\", "/").lower()
@@ -201,6 +195,11 @@ def plan(source, target, audio_from=(), skip=(), allow_missing=False):
         p.notes.append(f"the target is {p.fs}: an XDJ-1000MK2 or CDJ-2000NXS2 reads FAT32 only")
 
     p.entries = inventory(source, skip)
+    twins = names.lookalikes_in(e.rel for e in p.entries)
+    if twins and names.WINDOWS:
+        p.refusals.append(f"the source has names Windows can't keep apart on a FAT stick: {names.describe(twins)}. "
+                          f"Copying them from Windows can put one's files into the other, or overwrite them. Clone "
+                          f"this stick from a Mac or Linux instead")
     library = Library(audio_from) if audio_from else None
     for e in p.entries:
         if library and _top(e.rel) == "contents" and e.size >= 0:

@@ -22,7 +22,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from urllib.parse import quote
 
-from . import __version__, anlz, check
+from . import __version__, anlz, check, names
 from .pdb import Pdb
 
 AUDIO = {".mp3": "MP3 File", ".wav": "WAV File", ".aif": "AIFF File", ".aiff": "AIFF File",
@@ -42,21 +42,12 @@ def xml_safe(text):
 
 # ------------------------------------------------------------ the audio files
 def _walk(root):
-    stack = [root]
-    while stack:
-        try:
-            with os.scandir(stack.pop()) as it:
-                for e in it:
-                    try:
-                        if e.is_dir(follow_symlinks=False):
-                            if e.name.lower() not in SKIP_DIRS:
-                                stack.append(e.path)
-                        elif os.path.splitext(e.name)[1].lower() in AUDIO:
-                            yield e.path, e.stat(follow_symlinks=False).st_size
-                    except OSError:
-                        continue
-        except OSError:
-            continue
+    """(path, size) of every audio file under root. Folders are listed by rekfix and entered
+    through short names on Windows, so a look-alike folder name can't hide files (names.py); the
+    paths given are the real names, which is what rekordbox's XML needs."""
+    for rel, e in names.walk(root, skip=SKIP_DIRS, skip_anywhere=True):
+        if os.path.splitext(rel)[1].lower() in AUDIO:
+            yield os.path.join(root, rel), e.size
 
 
 def stick_keys(path):
