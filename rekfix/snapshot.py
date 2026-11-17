@@ -33,14 +33,17 @@ def _copy_folder(src, dst, progress):
     """Copy every file under src to dst, each checked for size. Returns (files, bytes). The
     folder is listed first, so the progress lines can say how much is left."""
     files = list(names.walk(src))
-    meter = Meter(sum(e.size for _, e in files), len(files), progress)
-    for rel, e in files:
-        to = os.path.join(dst, rel)
-        os.makedirs(os.path.dirname(to), exist_ok=True)
-        shutil.copy2(e.path, to)
-        if os.path.getsize(to) != e.size:
-            raise SystemExit(f"the copy of {os.path.join(os.path.basename(src), rel)} came out the wrong size")
-        meter.add(e.size)
+    meter = Meter(sum(e.size for _, e in files), len(files), progress, title="rekfix snapshot")
+    try:
+        for rel, e in files:
+            to = os.path.join(dst, rel)
+            os.makedirs(os.path.dirname(to), exist_ok=True)
+            shutil.copy2(e.path, to)
+            if os.path.getsize(to) != e.size:
+                raise SystemExit(f"the copy of {os.path.join(os.path.basename(src), rel)} came out the wrong size")
+            meter.add(e.size)
+    finally:
+        meter.end()
     return meter.done, meter.bytes
 
 

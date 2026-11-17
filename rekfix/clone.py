@@ -298,25 +298,28 @@ def run(p, verify=True, remove_extra=False, progress=print):
         for rel in p.extra:
             os.remove(os.path.join(p.target, rel))
     todo = sorted(p.of("copy"), key=_order)
-    meter = Meter(sum(e.size for e in todo), len(todo), progress)
+    meter = Meter(sum(e.size for e in todo), len(todo), progress, title="rekfix clone")
     done = done_bytes = 0
     failures = []
-    for e in todo:
-        dst = os.path.join(p.target, e.rel)
-        try:
-            for attempt in (1, 2):
-                digest = copy_one(e.src, dst, e.mtime)
-                if not verify or read_back(dst) == digest:
-                    break
-                if attempt == 2:
-                    raise CloneError(f"{e.rel} read back wrong twice: the target stick isn't storing data reliably. "
-                                     f"Stopped; don't use it")
-        except OSError as err:
-            failures.append(f"{e.rel}: {err}")
-            continue
-        done += 1
-        done_bytes += e.size
-        meter.add(e.size)
+    try:
+        for e in todo:
+            dst = os.path.join(p.target, e.rel)
+            try:
+                for attempt in (1, 2):
+                    digest = copy_one(e.src, dst, e.mtime)
+                    if not verify or read_back(dst) == digest:
+                        break
+                    if attempt == 2:
+                        raise CloneError(f"{e.rel} read back wrong twice: the target stick isn't storing data "
+                                         f"reliably. Stopped; don't use it")
+            except OSError as err:
+                failures.append(f"{e.rel}: {err}")
+                continue
+            done += 1
+            done_bytes += e.size
+            meter.add(e.size)
+    finally:
+        meter.end()                             # a live line ends before the next message
     if failures:
         progress(f"  {len(failures)} files couldn't be copied; the clone is incomplete and has no marker")
         return done, done_bytes, failures
@@ -332,7 +335,7 @@ def verify_only(p, progress=print):
     Returns [problems]."""
     problems = []
     todo = [e for e in sorted(p.entries, key=_order) if e.src is not None]
-    meter = Meter(sum(max(e.size, 0) for e in todo), len(todo), progress)
+    meter = Meter(sum(max(e.size, 0) for e in todo), len(todo), progress, title="rekfix verify")
     for e in todo:
         dst = os.path.join(p.target, e.rel)
         if not os.path.exists(dst):
@@ -347,4 +350,5 @@ def verify_only(p, progress=print):
             if read_back(dst) != h.hexdigest():
                 problems.append(f"different content: {e.rel}")
         meter.add(max(e.size, 0))
+    meter.end()
     return problems
