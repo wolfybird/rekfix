@@ -13,6 +13,7 @@ import os
 import shutil
 
 from . import names
+from .meter import Meter
 
 DB_FILES = ("export.pdb", "exportExt.pdb", "exportLibrary.db", "exportLibrary.db-wal", "exportLibrary.db-shm",
             "RBFLTR.DAT")
@@ -29,19 +30,18 @@ def md5(path, chunk=1 << 20):
 
 
 def _copy_folder(src, dst, progress):
-    """Copy every file under src to dst, each checked for size. Returns (files, bytes)."""
-    n = size = 0
-    for rel, e in names.walk(src):
+    """Copy every file under src to dst, each checked for size. Returns (files, bytes). The
+    folder is listed first, so the progress lines can say how much is left."""
+    files = list(names.walk(src))
+    meter = Meter(sum(e.size for _, e in files), len(files), progress)
+    for rel, e in files:
         to = os.path.join(dst, rel)
         os.makedirs(os.path.dirname(to), exist_ok=True)
         shutil.copy2(e.path, to)
         if os.path.getsize(to) != e.size:
             raise SystemExit(f"the copy of {os.path.join(os.path.basename(src), rel)} came out the wrong size")
-        n += 1
-        size += e.size
-        if n % 5000 == 0:
-            progress(f"  {n:,} files, {size / 1e9:.1f} GB")
-    return n, size
+        meter.add(e.size)
+    return meter.done, meter.bytes
 
 
 def take(root, dest_parent, label=None, full=False, audio=False, progress=print):
