@@ -36,9 +36,14 @@ How they were checked against real sticks:
 
 Next, in the order the stick owner asked for:
 
-1. **A GUI**: the same design language as mixarchive's app (HTML in a desktop window), with
-   mockups first. The flows: pick a stick, check it, and the dry run, confirmation and apply
-   for each repair, plus the last-ditch rescue as a guided path.
+1. **A visual, friendly GUI of its own**, so nobody needs the command line to rescue a stick.
+   - **Look:** a desktop window in the same design language as mixarchive's app (HTML), with its skins, Winamp skins included.
+   - **Mockups first.**
+   - **Flows:**
+     - pick a stick, check it, and see what's wrong in plain words;
+     - for each repair: the dry run, a confirmation, then apply;
+     - long copies (clone, snapshot) with the live progress meter;
+     - the last-ditch rescue as a guided path.
 2. **`rekfix playlists`: compare and repair playlists against a rekordbox library.**
    - Read rekordbox's `master.db` (optional pyrekordbox dependency) or a rekordbox XML export.
    - Report merged, missing and reordered entries in both stick databases.
