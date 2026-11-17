@@ -32,11 +32,11 @@ import json
 import os
 import shutil
 import sys
-import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 
 from . import __version__, names
+from .meter import Meter
 from .readtest import read_uncached
 
 SYSTEM = {"system volume information", "$recycle.bin", ".spotlight-v100", ".fseventsd", ".trashes",
@@ -298,10 +298,9 @@ def run(p, verify=True, remove_extra=False, progress=print):
         for rel in p.extra:
             os.remove(os.path.join(p.target, rel))
     todo = sorted(p.of("copy"), key=_order)
-    total = sum(e.size for e in todo)
+    meter = Meter(sum(e.size for e in todo), len(todo), progress)
     done = done_bytes = 0
     failures = []
-    t0 = last = time.time()
     for e in todo:
         dst = os.path.join(p.target, e.rel)
         try:
@@ -317,10 +316,7 @@ def run(p, verify=True, remove_extra=False, progress=print):
             continue
         done += 1
         done_bytes += e.size
-        if time.time() - last > 10 or done == len(todo):
-            last = time.time()
-            rate = done_bytes / max(last - t0, 0.001) / 1e6
-            progress(f"  {done:,}/{len(todo):,} files, {done_bytes / 1e9:.1f}/{total / 1e9:.1f} GB, {rate:.0f} MB/s")
+        meter.add(e.size)
     if failures:
         progress(f"  {len(failures)} files couldn't be copied; the clone is incomplete and has no marker")
         return done, done_bytes, failures
@@ -334,10 +330,10 @@ def run(p, verify=True, remove_extra=False, progress=print):
 def verify_only(p, progress=print):
     """Compare an existing copy with its source, file by file and byte by byte (uncached).
     Returns [problems]."""
-    problems, checked = [], 0
-    for e in sorted(p.entries, key=_order):
-        if e.src is None:
-            continue
+    problems = []
+    todo = [e for e in sorted(p.entries, key=_order) if e.src is not None]
+    meter = Meter(sum(max(e.size, 0) for e in todo), len(todo), progress)
+    for e in todo:
         dst = os.path.join(p.target, e.rel)
         if not os.path.exists(dst):
             problems.append(f"missing on the target: {e.rel}")
@@ -350,7 +346,5 @@ def verify_only(p, progress=print):
                     h.update(block)
             if read_back(dst) != h.hexdigest():
                 problems.append(f"different content: {e.rel}")
-        checked += 1
-        if checked % 2000 == 0:
-            progress(f"  checked {checked:,} files")
+        meter.add(max(e.size, 0))
     return problems
